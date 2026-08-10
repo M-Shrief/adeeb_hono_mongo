@@ -5,7 +5,7 @@ import { JWTPayload } from 'hono/utils/jwt/types';
 ////
 import {JWT_PRIVATE_KEY, JWT_PUBLIC_KEY} from '../config.js'
 import { RoleEnum } from '../database/schemas.js';
-import {OP, RoleEnumType, compare_password, create_permission, create_permissions, hash_password, sign_token, verify_token} from "./auth.js"
+import {OP, RoleEnumType, check_permission, compare_password, create_permission, create_permissions, hash_password, sign_token, verify_token} from "./auth.js"
 
 describe.concurrent("", async() => {
     describe("for Password Hashing", async() => {
@@ -34,6 +34,79 @@ describe.concurrent("", async() => {
             is_valid = await compare_password(password, hash3)
             expect(is_valid).toBe(false)
 
+        })
+    })
+    describe("for Permissions & Authorization", async() => {
+        test("Testing create_permission()", async () => {
+            let role1 = RoleEnum.DBA
+            let op1 = OP.READ
+            let wanted_result1 = role1 + ":" + op1
+            let permission1 = create_permission(role1,op1)
+            expect(permission1).toEqual(wanted_result1)
+
+            let role2 = RoleEnum.NORMAL
+            let op2 = OP.WRITE
+            let wanted_result2 = role2 + ":" + op2
+            let permission2 = create_permission(role2,op2)
+            expect(permission2).toEqual(wanted_result2)
+
+        })
+        test("Testing create_permissions()", async () => {
+            let roles1: RoleEnumType[] = [RoleEnum.NORMAL, RoleEnum.DBA]
+            let permisions = create_permissions(roles1)
+
+            expect(permisions.length).toEqual(roles1.length * 2)
+            let perm1_indx = permisions.indexOf(create_permission(roles1[0], OP.READ))
+            expect(perm1_indx).toBeGreaterThan(-1)
+            let perm2_indx = permisions.indexOf(create_permission(roles1[1], OP.WRITE))
+            expect(perm2_indx).toBeGreaterThan(-1)
+            let perm3_indx = permisions.indexOf(create_permission(RoleEnum.BANNED, OP.WRITE))
+            expect(perm3_indx).toBe(-1)
+        })
+        test("Testing check_permission()", async() => {
+            let is_authorized: boolean
+
+            let roles1: RoleEnumType[] = [RoleEnum.NORMAL, RoleEnum.DBA]
+            let permissions1 = create_permissions(roles1)
+            let authorized_list1 = [
+                create_permission(RoleEnum.MANAGMENT, OP.READ),
+                create_permission(RoleEnum.DBA, OP.READ),
+                create_permission(RoleEnum.ANALYTICS, OP.READ)
+            ]
+            is_authorized = check_permission(authorized_list1, permissions1, OP.READ)
+            expect(is_authorized).toBe(true)
+
+            let roles2: RoleEnumType[] = [RoleEnum.NORMAL]
+            let permissions2 = create_permissions(roles2)
+            let authorized_list2 = [
+                create_permission(RoleEnum.MANAGMENT, OP.READ),
+                create_permission(RoleEnum.DBA, OP.READ),
+                create_permission(RoleEnum.ANALYTICS, OP.READ)
+            ]
+            is_authorized = check_permission(authorized_list2, permissions2, OP.READ)
+            expect(is_authorized).toBe(false)
+
+            let roles3: RoleEnumType[] = [RoleEnum.NORMAL, RoleEnum.DBA, RoleEnum.BANNED]
+            let permissions3 = create_permissions(roles3)
+            let authorized_list3 = [
+                create_permission(RoleEnum.MANAGMENT, OP.READ),
+                create_permission(RoleEnum.DBA, OP.READ),
+                create_permission(RoleEnum.ANALYTICS, OP.READ)
+            ]
+            is_authorized = check_permission(authorized_list3, permissions3, OP.READ)
+            expect(is_authorized).toBe(false)
+
+            let permissions4 = [
+                create_permission(RoleEnum.NORMAL, OP.READ),
+                create_permission(RoleEnum.DBA, OP.READ),
+            ]
+            let authorized_list4 = [
+                create_permission(RoleEnum.MANAGMENT, OP.WRITE),
+                create_permission(RoleEnum.DBA, OP.WRITE),
+                create_permission(RoleEnum.ANALYTICS, OP.WRITE)
+            ]
+            is_authorized = check_permission(authorized_list4, permissions4, OP.WRITE)
+            expect(is_authorized).toBe(false)
         })
     })
     describe("for JWT", async() => {
