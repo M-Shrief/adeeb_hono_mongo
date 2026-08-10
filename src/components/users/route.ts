@@ -11,7 +11,7 @@ import { one_schema, signup_req, login_req, user_authorized_res, update_current_
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
 import { HttpStatusCode, base_response_schema, queries_schema_for_get_all_req, get_described_route, get_all_schema, describe_jwt_security } from '../../utils/api.js';
-import { compare_password, hash_password, sign_token, verify_token, create_permission, PERMISSIONS, check_permission, RoleEnumType } from "../../utils/auth.js"
+import { compare_password, hash_password, sign_token, verify_token, create_permission, OP, check_permission, RoleEnumType } from "../../utils/auth.js"
 
 export const users_route = new Hono() 
 
@@ -43,12 +43,12 @@ users_route.get(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.MANAGMENT, PERMISSIONS.READ),
-                create_permission(RoleEnum.DBA, PERMISSIONS.READ),
-                create_permission(RoleEnum.ANALYTICS, PERMISSIONS.READ),
+                create_permission(RoleEnum.MANAGMENT, OP.READ),
+                create_permission(RoleEnum.DBA, OP.READ),
+                create_permission(RoleEnum.ANALYTICS, OP.READ),
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.READ)
+            let is_authorized = check_permission(authorized_list, permissions, OP.READ)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -105,10 +105,10 @@ users_route.get(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.NORMAL, PERMISSIONS.READ),
+                create_permission(RoleEnum.NORMAL, OP.READ),
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.READ)
+            let is_authorized = check_permission(authorized_list, permissions, OP.READ)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -163,12 +163,12 @@ users_route.get(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.MANAGMENT, PERMISSIONS.READ),
-                create_permission(RoleEnum.DBA, PERMISSIONS.READ),
-                create_permission(RoleEnum.ANALYTICS, PERMISSIONS.READ),
+                create_permission(RoleEnum.MANAGMENT, OP.READ),
+                create_permission(RoleEnum.DBA, OP.READ),
+                create_permission(RoleEnum.ANALYTICS, OP.READ),
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.READ)
+            let is_authorized = check_permission(authorized_list, permissions, OP.READ)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -307,10 +307,10 @@ users_route.put(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.NORMAL, PERMISSIONS.WRITE),
+                create_permission(RoleEnum.NORMAL, OP.WRITE),
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.WRITE)
+            let is_authorized = check_permission(authorized_list, permissions, OP.WRITE)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -361,12 +361,12 @@ users_route.put(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.MANAGMENT, PERMISSIONS.WRITE),
-                create_permission(RoleEnum.DBA, PERMISSIONS.WRITE),
-                create_permission(RoleEnum.ANALYTICS, PERMISSIONS.WRITE),
+                create_permission(RoleEnum.MANAGMENT, OP.WRITE),
+                create_permission(RoleEnum.DBA, OP.WRITE),
+                create_permission(RoleEnum.ANALYTICS, OP.WRITE),
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.WRITE)
+            let is_authorized = check_permission(authorized_list, permissions, OP.WRITE)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -423,10 +423,10 @@ users_route.delete(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.NORMAL, PERMISSIONS.WRITE),
+                create_permission(RoleEnum.NORMAL, OP.WRITE),
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.WRITE)
+            let is_authorized = check_permission(authorized_list, permissions, OP.WRITE)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -470,12 +470,12 @@ users_route.delete(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.MANAGMENT, PERMISSIONS.WRITE),
-                create_permission(RoleEnum.DBA, PERMISSIONS.WRITE),
-                create_permission(RoleEnum.ANALYTICS, PERMISSIONS.WRITE),
+                create_permission(RoleEnum.MANAGMENT, OP.WRITE),
+                create_permission(RoleEnum.DBA, OP.WRITE),
+                create_permission(RoleEnum.ANALYTICS, OP.WRITE),
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.WRITE)
+            let is_authorized = check_permission(authorized_list, permissions, OP.WRITE)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }

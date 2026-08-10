@@ -12,7 +12,7 @@ import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/u
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, param_validator, query_validator } from '../../utils/validators.js'
 import { HttpStatusCode, base_response_schema, queries_schema_for_get_all_req, get_described_route, get_all_schema, describe_jwt_security} from '../../utils/api.js';
-import { verify_token, create_permission, PERMISSIONS, check_permission, check_if_adminstrator, check_ownership} from "../../utils/auth.js"
+import { verify_token, create_permission, OP, check_permission, check_if_adminstrator, check_ownership} from "../../utils/auth.js"
 import { object } from 'valibot';
 import { uuid_schema } from '../../utils/schemas.js';
 
@@ -46,7 +46,7 @@ orders_route.get(
 
             let permissions = payload["permissions"] as string[]
 
-            let is_authorized = check_if_adminstrator(permissions, PERMISSIONS.READ)
+            let is_authorized = check_if_adminstrator(permissions, OP.READ)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -119,10 +119,10 @@ orders_route.get(
 
             let permissions = payload["permissions"] as string[]
             let authorized_list = [
-                create_permission(RoleEnum.NORMAL, PERMISSIONS.READ)
+                create_permission(RoleEnum.NORMAL, OP.READ)
             ]
             
-            let is_authorized = check_permission(authorized_list, permissions, PERMISSIONS.READ)
+            let is_authorized = check_permission(authorized_list, permissions, OP.READ)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -229,7 +229,7 @@ orders_route.get(
             }
 
             let permissions = payload["permissions"] as string[]
-            let is_authorized = check_if_adminstrator(permissions, PERMISSIONS.READ)
+            let is_authorized = check_if_adminstrator(permissions, OP.READ)
             if (!is_authorized) {
                 if (check_ownership(order.user_id, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
@@ -320,7 +320,7 @@ orders_route.post(
             }
 
             let permissions = payload["permissions"] as string[]
-            let is_authorized = check_if_adminstrator(permissions, PERMISSIONS.WRITE)
+            let is_authorized = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_authorized) {
                 return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
             }
@@ -416,7 +416,7 @@ orders_route.post(
             let user: any = payload["user"]
             let user_id: string = user["id"]
             let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, PERMISSIONS.WRITE)
+            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
                 if (check_ownership(existing_order.user_id, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
@@ -485,7 +485,7 @@ orders_route.put(
             let data = await c.req.json()
 
             let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, PERMISSIONS.WRITE)
+            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
                 if (check_ownership(existing_order.user_id, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
@@ -570,7 +570,7 @@ orders_route.put(
             let data = await c.req.json()
 
             let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, PERMISSIONS.WRITE)
+            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
                 if (check_ownership(existing_order.user_id, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
@@ -637,7 +637,7 @@ orders_route.delete(
 
 
             let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, PERMISSIONS.WRITE)
+            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
                 if (check_ownership(existing_order.user_id, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
@@ -704,7 +704,7 @@ orders_route.delete(
             }
 
             let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, PERMISSIONS.WRITE)
+            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
                 if (check_ownership(existing_order.user_id, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
