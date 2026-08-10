@@ -20,16 +20,16 @@ export const compare_password = async (password: string, pass_hash: string) =>
   await bcrypt.compare(password, pass_hash);
 
 
-export const PERMISSIONS = {
+export const OP = {
     WRITE: "write",
     READ: "read"
 } as const
-type PERMISSION = typeof PERMISSIONS[keyof typeof PERMISSIONS];
+type OP_ENUM = typeof OP[keyof typeof OP];
 
 
 export type RoleEnumType = typeof RoleEnum[keyof typeof RoleEnum];
 
-export function create_permission(role: RoleEnumType, op: PERMISSION = PERMISSIONS.READ): string {
+export function create_permission(role: RoleEnumType, op: OP_ENUM = OP.READ): string {
     return role + ":" + op
 }
 
@@ -37,10 +37,10 @@ export function create_permissions(roles: RoleEnumType[]) {
     let permissions: string[] = []
 
     for(let role of roles) {
-        let read_permission = create_permission(role, PERMISSIONS.READ)
+        let read_permission = create_permission(role, OP.READ)
         permissions.push(read_permission)
 
-        let write_permission = create_permission(role, PERMISSIONS.WRITE)
+        let write_permission = create_permission(role, OP.WRITE)
         permissions.push(write_permission)
     }
 
@@ -82,16 +82,16 @@ export const verify_token = async (auth_header: string): Promise<JWTPayload | nu
 }
 
 
-export const check_permission = (authorized_list: string[], permissions: string[], op: PERMISSION = PERMISSIONS.READ) => {
+export const check_permission = (authorized_list: string[], permissions: string[], op: OP_ENUM = OP.READ) => {
     let is_authorized = false
     let is_banned = false
 
     for (let perm of permissions) {
-        if (op == PERMISSIONS.WRITE && perm == create_permission(RoleEnum.BANNED, PERMISSIONS.WRITE)) {
+        if (op == OP.WRITE && perm == create_permission(RoleEnum.BANNED, OP.WRITE)) {
             is_banned = true
             break
         }
-        else if (op == PERMISSIONS.READ && perm == create_permission(RoleEnum.BANNED, PERMISSIONS.READ)) {
+        else if (op == OP.READ && perm == create_permission(RoleEnum.BANNED, OP.READ)) {
             is_banned = true
             break
         }
@@ -110,7 +110,7 @@ export const check_permission = (authorized_list: string[], permissions: string[
     return is_authorized
 } 
 
-export const check_if_adminstrator = (user_permissions: string[], op: PERMISSION = "read"): boolean => {
+export const check_if_adminstrator = (user_permissions: string[], op: OP_ENUM = "read"): boolean => {
     let authorized_list = [
         create_permission(RoleEnum.MANAGMENT, op),
         create_permission(RoleEnum.DBA, op),
@@ -147,7 +147,7 @@ export const verify_adminstrator = () =>
     }
 
     let permissions = payload["permissions"] as string[]
-    let is_adminstrator = check_if_adminstrator(permissions, PERMISSIONS.READ)
+    let is_adminstrator = check_if_adminstrator(permissions, OP.READ)
     if (!is_adminstrator) {
         return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
     }
