@@ -68,6 +68,9 @@ export const sign_token = async (id: string, username: string, roles: RoleEnumTy
     );
 };
 
+/**
+ * Verify JWT token, it verifies payload's exp, iat...etc as long as they're provided in the payload.
+ */
 export const verify_token = async (auth_header: string): Promise<JWTPayload | null> => {
     try {
         let token = auth_header.slice(7)
@@ -76,7 +79,6 @@ export const verify_token = async (auth_header: string): Promise<JWTPayload | nu
 
         return payload
     } catch(e) {
-        console.error(e)
         return null
     }
 }
