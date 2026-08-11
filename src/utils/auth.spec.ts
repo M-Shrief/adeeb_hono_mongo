@@ -7,7 +7,7 @@ import {JWT_PRIVATE_KEY, JWT_PUBLIC_KEY} from '../config.js'
 import { RoleEnum } from '../database/schemas.js';
 import {OP, RoleEnumType, check_permission, compare_password, create_permission, create_permissions, hash_password, sign_token, verify_token} from "./auth.js"
 
-describe.concurrent("", async() => {
+describe.concurrent("Auth utils", async() => {
     describe("for Password Hashing", async() => {
         let password = "password"
         test("Testing hash_password()", async() => {
