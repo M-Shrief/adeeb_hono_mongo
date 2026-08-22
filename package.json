@@ -1,7 +1,7 @@
 {
   "name": "adeeb_hono",
   "version": "0.1.0",
-  "description": "Adeeb's Backend iteration in JS & TS, using Hono",
+  "description": "Adeeb's Backend iteration in JS & TS, using Hono with MongoDB",
   "type": "module",
   "keywords": [
     "JavaScript",
