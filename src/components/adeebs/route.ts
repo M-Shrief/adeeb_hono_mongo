@@ -2,10 +2,9 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { sql, getTableColumns, eq } from 'drizzle-orm';
+import {Error as MError, Types, QueryFilter} from "mongoose"
 /////
-import { db } from "../../database/index.js"
-import { adeeb_table } from "../../database/schemas.js"
+import { AdeebModel } from "../../database/schemas.js"
 import { one_schema, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
@@ -34,17 +33,22 @@ adeeb_route.get(
         try {
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
-            // We make 2 seperate queries, to get the data & the total_count of rows.
-            // we can make 1 query, but we'll need to make manual transformation
-            // so that we remove the count field from every item in the array.
-            let { created_at, updated_at, ...rest} = getTableColumns(adeeb_table) // select all columns, except created_at & updated_at.
-            let [adeebs, counts] = await Promise.all([
-                await db.select({...rest}).from(adeeb_table).limit(limit).offset(offset),
-                await db.select({total_count: sql<number>`count(*) OVER()`.mapWith(Number)}).from(adeeb_table)
-            ])
-            
-            let total_count = counts[0] ? counts[0].total_count : 0 
 
+            const result = await AdeebModel.aggregate([
+                {
+                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
+                },
+                {
+                    $facet: {
+                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
+                        count: [ { $count: 'total_count' } ]          // Get count
+                    }
+                }
+            ]);
+
+            const adeebs = result[0].data;
+            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
+            
             return c.json(
                 {
                     data: adeebs,
@@ -85,22 +89,19 @@ adeeb_route.get(
                 return c.json(cache_res, HttpStatusCode.OK)
             }
 
-            let { created_at, updated_at, ...rest} = getTableColumns(adeeb_table) // select all columns, except created_at & updated_at.
-            let adeeb = await db.query.adeeb_table.findFirst({
-                columns: {
-                    id: true,
-                    name: true,
-                    bio: true,
-                    time_period: true,
-                    reviewed: true,
+            const result = await AdeebModel.aggregate([
+                {
+                    $match: { _id: new Types.UUID(id) },
                 },
-                where: (adeeb_table, { eq }) => eq(adeeb_table.id, id),
-            })
-            if (!adeeb) {
+                {
+                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
+                }
+            ]);
+            if (result.length == 0) {
                 return c.json({message: "Adeeb's not Found"}, HttpStatusCode.NOT_FOUND)
             }
-            await cache_set(cache_key, adeeb)
-            return c.json(adeeb, HttpStatusCode.OK)
+            await cache_set(cache_key, result[0])
+            return c.json(result[0], HttpStatusCode.OK)
 
         } catch(e) {
             logger.error({error:e}, "Error in GET /adeebs/:id")
@@ -127,20 +128,12 @@ adeeb_route.post(
     async(c) => {
         try {
             let new_data = await c.req.json()
-            let new_adeeb = await db
-                .insert(adeeb_table)
-                .values(new_data)
-                .onConflictDoNothing({ target: [adeeb_table.name]})
-                .returning()
-                .then(res => res[0])
-            
-            // if the first item in res[0] is undefined,
-            // then there was a conflict and it already exists
-            if (!new_adeeb) {
-                return c.json({ message: "Adeeb already exists"}, HttpStatusCode.NOT_ACCEPTABLE) 
-            }
+            let new_adeeb = await AdeebModel.create({name: new_data.name, bio: new_data.bio, time_period: new_data.time_period, reviewed: new_data.reviewed})
             return c.json(new_adeeb, HttpStatusCode.CREATED)
-        } catch(e) {
+        } catch(e: any) {
+            if (e.code === 11000) { // Handle Duplicate Key Error
+                return c.json({ message: "Adeeb already exists"}, HttpStatusCode.CONFLICT) 
+            }
             logger.error({error:e}, "Error in POST /adeebs")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -163,15 +156,26 @@ adeeb_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many Adeebs"),
     async (c) => {
         try {
-            let new_data = await c.req.json()
-            let new_adeebs = await db
-                .insert(adeeb_table)
-                .values(new_data)
-                .onConflictDoNothing({ target: [adeeb_table.name]})
-                .returning()
+            let new_adeebs: any[] = []
+            let new_data: any[]  = await c.req.json()
+            for(let adeeb of new_data) {
+                try {
+                    let new_adeeb = await AdeebModel.create(adeeb);
+                    new_adeebs.push(new_adeeb)
+                } catch(e) {
+                    continue
+                    // if (e.code === 11000) { // Handle Duplicate Key Error
+                    //     const field = Object.keys(e.keyPattern)[0];
+                    //     const value = e.keyValue[field];
+                    //     const index = e.index
+                    //     console.error(`Duplicate value for ${field}: ${value}`);
 
+                    //     return c.json({ message: "Adeeb already exists"}, HttpStatusCode.CONFLICT) 
+                    // }
+                }
+            }
             return c.json({created_items: new_adeebs, success_count: new_adeebs.length, failed_count: new_data.length - new_adeebs.length}, HttpStatusCode.CREATED)
-        } catch(e) {
+        } catch(e: any) {
             logger.error({error:e}, "Error in POST /adeebs/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -198,8 +202,11 @@ adeeb_route.put(
             let id = c.req.param("id")
             let data = await c.req.json()
             
-            await db.update(adeeb_table).set({...data, updated_at: sql`NOW()`}).where(eq(adeeb_table.id, id))
-
+            // We use QueryFilter because it'll refuse filtering by _id
+            // without making another interface.
+            // Note we could've just used {_id: id} as any, but we type helpers instead
+            let filter_q: QueryFilter<typeof AdeebModel> = { _id: new Types.UUID(id) }
+            await AdeebModel.updateOne( filter_q, { $set: { ...data} })
             // Delete from cache after update to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)
             await cache_del(cache_key)
@@ -230,7 +237,8 @@ adeeb_route.delete(
         try {
             let id = c.req.param("id")
             
-            await db.delete(adeeb_table).where(eq(adeeb_table.id, id))
+            let filter_q: QueryFilter<typeof AdeebModel> = { _id: new Types.UUID(id) }
+            await AdeebModel.deleteOne( filter_q)
 
             // Delete from cache after delete to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)
