@@ -1,10 +1,27 @@
-import { relations } from "drizzle-orm";
-import { pgTable, pgEnum, varchar, timestamp, boolean, uuid } from "drizzle-orm/pg-core";
-///
-import { adeeb_id, chosen_verses_id_optional, id, order_id, poem_id, poem_id_optional, prose_qoute_id_optional, qoute, qoute_optional, reviewed, tags, timestamps, user_id_optional, verses, verses_optional, is_couplet, is_couplet_optional } from "./columns.js"
+import { Schema } from "mongoose";
+// 
+import {conn} from './index.js'
+import { 
+    is_couplet_schema, 
+    adeeb_ref, 
+    poem_ref, 
+    qoute_schema,
+    reviewed_schema, 
+    tags_schema, 
+    timestamps_schema, 
+    uuid_schema, 
+    verses_schema,
+    user_ref_optional,
+    order_ref,
+    poem_ref_optional,
+    chosen_verse_ref_optional,
+    prose_qoute_ref_optional,
+    is_couplet_schema_optional,
+    qoute_schema_optional,
+    verses_schema_optional
+ } from "./fields.js";
 
 
-// Didn't use enum for preformance, so we just use as const
 export const TimePeriodEnum = {
     UNDEFINED : "غير محدد",
     JAHLI : "جاهلي",
@@ -15,52 +32,104 @@ export const TimePeriodEnum = {
     MODERN : "حديث"
 } as const
 
-export const time_period_enum = pgEnum("time_period_enum", [TimePeriodEnum.UNDEFINED, TimePeriodEnum.JAHLI, TimePeriodEnum.AMOEI, TimePeriodEnum.ABASI, TimePeriodEnum.ANDALUSI, TimePeriodEnum.TURKISH_ERA, TimePeriodEnum.MODERN]);
+export const adeeb_schema = new Schema(
+    {
+        _id: uuid_schema,
+        name: {
+            type: String,
+            maxLength: 128,
+            unique: true,
+            required: true,
+        },
+        bio: {
+            type: String,
+            maxLength: 1024,
+            required: true,
+        },
+        time_period: {
+            type: String,
+            maxLength: 128,
+            enum: {
+                values: Object.values(TimePeriodEnum),
+                // To assign error message:
+                // message: '{VALUE} is not a valid TimePeriod'
+            },
+            required: true,
+        },
+        reviewed: reviewed_schema
+    },
+    {
+        timestamps: timestamps_schema
+    }
+)
 
-export const adeeb_table = pgTable('adeebs', {
-    ...id,
-    name: varchar({ length: 128 }).unique().notNull(),
-    bio: varchar({ length: 1024 }).notNull(),
-    time_period: time_period_enum().default(TimePeriodEnum.UNDEFINED),
-    ...reviewed,
-    ...timestamps,
-})
+export const AdeebModel = conn.model("Adeeb", adeeb_schema)
+
+export const poem_schema = new Schema(
+    {
+        _id: uuid_schema,
+        intro: {
+            type: String,
+            maxLength: 256,
+            unique: true,
+            required: true,
+        },
+        verses: verses_schema,
+        is_couplet: is_couplet_schema,
+        reviewed: reviewed_schema,
+
+        // Refs
+        adeeb: adeeb_ref,
+    },
+    {
+        timestamps: timestamps_schema
+    }
+)
+
+export const PoemModel = conn.model("Poem", poem_schema)
+
+export const chosen_verse_schema = new Schema(
+    {
+        _id: uuid_schema,
+        tags: tags_schema,
+        verses: verses_schema,
+        is_couplet: is_couplet_schema,
+        reviewed: reviewed_schema,
+
+        // Refs
+        adeeb: adeeb_ref,
+        poem: poem_ref,
+    },
+    {
+        timestamps: timestamps_schema
+    }
+)
+
+export const ChosenVerseModel = conn.model("ChosenVerse", chosen_verse_schema)
 
 
-export const poem_table = pgTable('poems', {
-    ...id,
-    intro: varchar({ length: 256 }).unique().notNull(),
-    ...verses,
-    ...is_couplet,
-    ...reviewed,
-    ...timestamps,
-    // relations
-    ...adeeb_id,
-})
+export const prose_qoute_schema = new Schema(
+    {
+        _id: uuid_schema,
+        tags: tags_schema,
+        qoute: qoute_schema,
+        source: {
+            type: String,
+            maxLength: 128,
+            default: undefined,
+        },
+        reviewed: reviewed_schema,
 
+        // Refs
+        adeeb: adeeb_ref,
+    },
+    {
+        timestamps: timestamps_schema
+    }
+)
 
-export const chosen_verses_table = pgTable('chosen_verses', {
-    ...id,
-    ...tags, 
-    ...verses,
-    ...is_couplet,
-    ...reviewed,
-    ...timestamps,
-    // relations
-    ...adeeb_id,
-    ...poem_id,
-})
+export const ProseQouteModel = conn.model("ProseQoute", prose_qoute_schema)
 
-export const prose_qoutes_table = pgTable('prose_qoutes', {
-    ...id,
-    ...qoute,
-    source: varchar({ length: 128 }),
-    ...tags, 
-    ...reviewed,
-    ...timestamps,
-    // relations
-    ...adeeb_id,
-})
 
 
 export const RoleEnum = {
@@ -71,15 +140,41 @@ export const RoleEnum = {
   BANNED: "Banned"
 } as const
 
-export const roles_enum = pgEnum("roles_enum", [RoleEnum.NORMAL, RoleEnum.MANAGMENT, RoleEnum.DBA, RoleEnum.ANALYTICS, RoleEnum.BANNED]);
+export const user_schema = new Schema(
+    {
+        _id: uuid_schema,
+        username: {
+            type: String,
+            maxLength: 128,
+            unique: true,
+            required: true,
+        },
+        password: {
+            type: String,
+            maxLength: 256,
+            required: true,
+        },
+        roles: {
+            type: [String],
+            enum: {
+                values: Object.values(RoleEnum),
+                // To assign error message:
+                // message: '{VALUE} is not a valid TimePeriod'
+            },
+            validate: {
+                validator: function(v: [string]) {
+                    return v.length <= 6;
+                },
+            },
+            required: true,
+        },
+    },
+    {
+        timestamps: timestamps_schema
+    }
+)
 
-export const user_table = pgTable('users', {
-    ...id,
-    username: varchar({ length: 128 }).unique().notNull(),
-    password: varchar({ length: 256 }).notNull(),
-    roles: roles_enum().array().default([RoleEnum.NORMAL]).notNull(),
-    ...timestamps
-})
+export const UserModel = conn.model("User", user_schema)
 
 export const OrderStatusEnum = {
     IN_PROGRESS: "in progress",
@@ -87,25 +182,52 @@ export const OrderStatusEnum = {
     COMPLETED: "completed",
 } as const
 
+export const order_schema = new Schema(
+        {
+        _id: uuid_schema,
+        name: {
+            type: String,
+            maxLength: 128,
+            required: true,
+        },
+        phone: {
+            type: String,
+            maxLength: 128,
+            required: true,
+        },
+        address: {
+            type: String,
+            maxLength: 256,
+            required: true,
+        },
+        delivery_schedule: {
+            type: Date,
+            default: undefined,
+        },
+        is_updateable: {
+            type: Boolean,
+            default: true
+        },
+        status: {
+            type: String,
+            enum: {
+                values: Object.values(OrderStatusEnum),
+                // To assign error message:
+                // message: '{VALUE} is not a valid TimePeriod'
+            },
+            required: true,
+        },
+        reviewed: reviewed_schema,
+ 
+        // Refs
+        user: user_ref_optional,
+    },
+    {
+        timestamps: timestamps_schema
+    }
+)
 
-export const order_status_enum = pgEnum("order_status_enum", [OrderStatusEnum.IN_PROGRESS, OrderStatusEnum.COMPLETED, OrderStatusEnum.ABORTED]);
-
-
-export const order_table = pgTable('orders', {
-    ...id,
-    ...user_id_optional,    
-    name: varchar({ length: 128}).notNull(),
-    phone: varchar({ length: 128}).notNull(),
-    address: varchar({ length: 256}).notNull(),
-    delivery_schedule: timestamp(),
-    is_updateable: boolean().default(true).notNull(),
-    status: order_status_enum().default(OrderStatusEnum.IN_PROGRESS).notNull(),
-    ...reviewed,
-    ...timestamps
-})
-
-
-// Prints /////////////////
+export const OrderModel = conn.model("Order", order_schema)
 
 export const OutfitTypeEnum = {
     TSHIRT_7: "تيشيرت - لياقة 7",
@@ -116,86 +238,47 @@ export const OutfitTypeEnum = {
     PULLOVER: "بلوفر",
 } as const
 
+export const print_schema = new Schema(
+        {
+        _id: uuid_schema,
+        font_type: {
+            type: String,
+            maxLength: 64,
+            required: true,
+        },
+        font_color: {
+            type: String,
+            maxLength: 64,
+            required: true,
+        },
+        outfit_type: {
+            type: String,
+            enum: {
+                values: Object.values(OutfitTypeEnum),
+                // To assign error message:
+                // message: '{VALUE} is not a valid TimePeriod'
+            },
+            required: true,
+        },
+        outfit_color: {
+            type: String,
+            maxLength: 64,
+            required: true,
+        },
 
-export const outfit_type_enum = pgEnum("outfit_type_enum", [OutfitTypeEnum.TSHIRT_7, OutfitTypeEnum.TSHIRT_HALF, OutfitTypeEnum.TSHIRT_POLO, OutfitTypeEnum.JACKET, OutfitTypeEnum.SWEETSHIRT, OutfitTypeEnum.PULLOVER]);
+        qoute: qoute_schema_optional,
+        verses: verses_schema_optional,
+        is_couplet: is_couplet_schema_optional,
 
-export const prints_table = pgTable('prints', {
-    ...id,
-    font_type: varchar({ length: 64 }).notNull(),
-    font_color: varchar({ length: 64 }).notNull(),
-    outfit_type: outfit_type_enum().notNull(),
-    outfit_color: varchar({ length: 64 }).notNull(),    
+        // Refs
+        order: order_ref,
+        user: user_ref_optional,
 
-    ...qoute_optional,
-    ...verses_optional,
-    ...is_couplet_optional,
-
-    // relations
-    ...order_id,
-    ...user_id_optional,    
-
-    ...poem_id_optional,
-    ...chosen_verses_id_optional,
-    ...prose_qoute_id_optional,
-})
-
-
-//////////////////////// Relations ////////////////////
- 
-
-export const adeeb_relations = relations(adeeb_table, ({ many }) => ({
-    poems: many(poem_table),
-    chosen_verses: many(chosen_verses_table),
-    prose_qoutes: many(prose_qoutes_table),
-}))
-
-export const poem_relations = relations(poem_table, ({one, many}) => ({
-	adeeb: one(adeeb_table, {
-		fields: [poem_table.adeeb_id],
-		references: [adeeb_table.id],
-	}),
-    chosen_verses: many(chosen_verses_table),
-}));
-
-export const chosen_verses_relations = relations(chosen_verses_table, ({ one }) => ({
-	adeeb: one(adeeb_table, {
-		fields: [chosen_verses_table.adeeb_id],
-		references: [adeeb_table.id],
-	}),
-    poem: one(poem_table, {
-        fields: [chosen_verses_table.poem_id],
-        references: [poem_table.id]
-    })
-}));
-
-export const prose_qoutes_relations = relations(prose_qoutes_table, ({ one }) => ({
-	adeeb: one(adeeb_table, {
-		fields: [prose_qoutes_table.adeeb_id],
-		references: [adeeb_table.id],
-	}),
-}));
-
-export const user_relations = relations(user_table, ({ many }) => ({
-    orders: many(order_table),
-    prints: many(prints_table),
-}));
-
-
-export const order_relations = relations(order_table, ({one, many}) => ({
-	user: one(user_table, {
-		fields: [order_table.user_id],
-		references: [user_table.id],
-	}),
-    prints: many(prints_table),
-}));
-
-export const print_relations = relations(prints_table, ({one, many}) => ({
-	order: one(order_table, {
-		fields: [prints_table.order_id],
-		references: [order_table.id],
-	}),
-    user: one(user_table, {
-		fields: [prints_table.user_id],
-		references: [user_table.id],
-	}),
-}));
+        poem: poem_ref_optional,
+        chosen_verse: chosen_verse_ref_optional,
+        prose_qoute: prose_qoute_ref_optional
+    },
+    {
+        timestamps: timestamps_schema
+    }
+)
