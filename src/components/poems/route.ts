@@ -2,11 +2,10 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { sql, getTableColumns, eq } from 'drizzle-orm';
+import { QueryFilter, Types } from 'mongoose';
 /////
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
-import { db } from "../../database/index.js"
-import { poem_table } from "../../database/schemas.js"
+import { PoemModel } from "../../database/schemas.js"
 import { one_schema, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
@@ -34,16 +33,21 @@ poem_route.get(
         try {
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
-            // We make 2 seperate queries, to get the data & the total_count of rows.
-            // we can make 1 query, but we'll need to make manual transformation
-            // so that we remove the count field from every item in the array.
-            let { created_at, updated_at, ...rest} = getTableColumns(poem_table) // select all columns, except created_at & updated_at.
-            let [poems, counts] = await Promise.all([
-                await db.select({...rest}).from(poem_table).limit(limit).offset(offset),
-                await db.select({total_count: sql<number>`count(*) OVER()`.mapWith(Number)}).from(poem_table)
-            ])
-            
-            let total_count = counts[0] ? counts[0].total_count : 0 
+
+            const result = await PoemModel.aggregate([
+                {
+                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
+                },
+                {
+                    $facet: {
+                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
+                        count: [ { $count: 'total_count' } ]          // Get count
+                    }
+                }
+            ]);
+
+            const poems = result[0].data;
+            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
 
             return c.json(
                 {
@@ -83,20 +87,15 @@ poem_route.get(
             if(cache_res) {
                 return c.json(cache_res, HttpStatusCode.OK)
             }
-
-            let { created_at, updated_at, ...rest} = getTableColumns(poem_table) // select all columns, except created_at & updated_at.
-            let poem = await db.query.poem_table.findFirst({
-                columns: {
-                    id: true,
-                    intro: true,
-                    verses: true,
-                    is_couplet: true,
-                    reviewed: true,
-
-                    adeeb_id: true,
-                },
-                where: (poem_table, { eq }) => eq(poem_table.id, id),
-            })
+            let poem = await PoemModel.findById(id, {
+                intro: 1,
+                verses: 1,
+                is_couplet: 1,
+                reviewed: 1,
+                //
+                adeeb: 1,
+                }).populate('adeeb', ['name', 'bio', 'time_period']);
+            logger.info(poem)
             if (!poem) {
                 return c.json({message: "Poem's not Found"}, HttpStatusCode.NOT_FOUND)
             }
@@ -129,20 +128,13 @@ poem_route.post(
     async(c) => {
         try {
             let new_data = await c.req.json()
-            let new_poem = await db
-                .insert(poem_table)
-                .values(new_data)
-                .onConflictDoNothing({ target: [poem_table.intro]})
-                .returning()
-                .then(res => res[0])
+            let new_poem = await PoemModel.create({...new_data})
             
-            // if the first item in res[0] is undefined,
-            // then there was a conflict and it already exists
-            if (!new_poem) {
-                return c.json({ message: "Poem already exists"}, HttpStatusCode.NOT_ACCEPTABLE) 
-            }
             return c.json(new_poem, HttpStatusCode.CREATED)
-        } catch(e) {
+        } catch(e: any) {
+            if (e.code === 11000) { // Handle Duplicate Key Error
+                return c.json({ message: "Poem already exists"}, HttpStatusCode.CONFLICT) 
+            }
             logger.error({error:e}, "Error in POST /poems")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -165,15 +157,19 @@ poem_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many Poems"),
     async(c) => {
         try {
-            let new_data = await c.req.json()
-            let new_poems = await db
-                .insert(poem_table)
-                .values(new_data)
-                .onConflictDoNothing({ target: [poem_table.intro]})
-                .returning()
+            let new_poems: any[] = []
+            let new_data: any[] = await c.req.json()
+            for(let poem of new_data) {
+                try {
+                    let new_poem = await PoemModel.create(poem);
+                    new_poems.push(new_poem)
+                } catch(e) {
+                    continue
+                }
+            }
 
             return c.json({created_items: new_poems, success_count: new_poems.length, failed_count: new_data.length - new_poems.length}, HttpStatusCode.CREATED)
-        } catch(e) {
+        } catch(e: any) {
             logger.error({error:e}, "Error in POST /poems/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -200,8 +196,8 @@ poem_route.put(
             let id = c.req.param("id")
             let data = await c.req.json()
             
-            await db.update(poem_table).set({...data, updated_at: sql`NOW()`}).where(eq(poem_table.id, id))
-            
+            let filter_q: QueryFilter<typeof PoemModel> = { _id: new Types.UUID(id) }
+            await PoemModel.updateOne( filter_q, { $set: { ...data} })
             // Delete from cache after update to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)
             await cache_del(cache_key)
@@ -232,7 +228,8 @@ poem_route.delete(
         try {
             let id = c.req.param("id")
             
-            await db.delete(poem_table).where(eq(poem_table.id, id))
+            let filter_q: QueryFilter<typeof PoemModel> = { _id: new Types.UUID(id) }
+            await PoemModel.deleteOne( filter_q)
 
             // Delete from cache after delete to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)

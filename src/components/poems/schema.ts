@@ -19,7 +19,7 @@ const intro_schema = pipe(string(), trim(), minLength(4), maxLength(256));
 
 export const one_schema = object({
   id: uuid_schema,
-  adeeb_id: uuid_schema,
+  adeeb: uuid_schema,
   intro: intro_schema,
   verses: verses_schema,
   is_couplet: is_couplet_schema,
@@ -27,7 +27,7 @@ export const one_schema = object({
 })
 
 export const create_one_req = object({
-  adeeb_id: uuid_schema,
+  adeeb: uuid_schema,
   intro: intro_schema,
   verses: verses_schema,
   is_couplet: is_couplet_schema,
@@ -36,7 +36,7 @@ export const create_one_req = object({
 
 export const create_one_res = object({
   id: uuid_schema,
-  adeeb_id: uuid_schema,
+  adeeb: uuid_schema,
   intro: intro_schema,
   verses: verses_schema,
   is_couplet: is_couplet_schema,
@@ -53,7 +53,7 @@ export const create_many_res = object({
 })
 
 export const update_req = object({
-  adeeb_id: optional(uuid_schema),
+  adeeb: optional(uuid_schema),
   intro: optional(intro_schema),
   verses: optional(verses_schema),
   is_couplet: optional(is_couplet_schema),
