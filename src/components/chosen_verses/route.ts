@@ -98,7 +98,8 @@ chosen_verses_route.get(
                 //
                 adeeb: 1,
                 poem: 1,
-                }).populate('adeeb', ['name', 'bio', 'time_period'])
+                })
+                .populate('adeeb', ['name', 'time_period'])
                 .populate('poem', ['_id', 'intro']);
             if (!chosen_verse) {
                 return c.json({message: "ChosenVerse's not Found"}, HttpStatusCode.NOT_FOUND)
