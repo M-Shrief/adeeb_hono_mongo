@@ -27,7 +27,7 @@ const outfit_color_schema = pipe(string(), trim(), maxLength(64));
 
 
 export const one_print_schema = object({
-  id: uuid_schema,
+  _id: uuid_schema,
 
   font_type: font_type_schema,
   font_color: font_color_schema,
@@ -38,11 +38,11 @@ export const one_print_schema = object({
   is_couplet: optional(is_couplet_schema),
   qoute: optional(qoute_schema),
 
-  user_id: optional(uuid_schema),
-  order_id: optional(uuid_schema),
-  poem_id: optional(uuid_schema),
-  chosen_verses_id: optional(uuid_schema),
-  prose_qoute_id: optional(uuid_schema),
+  user: optional(uuid_schema),
+  order: optional(uuid_schema),
+  poem: optional(uuid_schema),
+  chosen_verses: optional(uuid_schema),
+  prose_qoute: optional(uuid_schema),
 })
 
 export const create_print_req = object({
@@ -55,14 +55,14 @@ export const create_print_req = object({
   is_couplet: optional(is_couplet_schema),
   qoute: optional(qoute_schema),
 
-  poem_id: optional(uuid_schema),
-  chosen_verses_id: optional(uuid_schema),
-  prose_qoute_id: optional(uuid_schema),
+  poem: optional(uuid_schema),
+  chosen_verses: optional(uuid_schema),
+  prose_qoute: optional(uuid_schema),
 })
 
 
 export const create_print_res = object({
-  id: uuid_schema,
+  _id: uuid_schema,
 
   font_type: font_type_schema,
   font_color: font_color_schema,
@@ -73,14 +73,14 @@ export const create_print_res = object({
   is_couplet: optional(is_couplet_schema),
   qoute: optional(qoute_schema),
 
-  poem_id: optional(uuid_schema),
-  chosen_verses_id: optional(uuid_schema),
-  prose_qoute_id: optional(uuid_schema),
+  poem: optional(uuid_schema),
+  chosen_verses: optional(uuid_schema),
+  prose_qoute: optional(uuid_schema),
 })
 
 export const update_print_req = object({
-  order_id: optional(uuid_schema),
-  user_id: optional(uuid_schema),
+  order: optional(uuid_schema),
+  user: optional(uuid_schema),
 
   font_type: optional(font_type_schema),
   font_color: optional(font_color_schema),
@@ -91,9 +91,9 @@ export const update_print_req = object({
   is_couplet: optional(is_couplet_schema),
   qoute: optional(qoute_schema),
 
-  poem_id: optional(uuid_schema),
-  chosen_verses_id: optional(uuid_schema),
-  prose_qoute_id: optional(uuid_schema),
+  poem: optional(uuid_schema),
+  chosen_verses: optional(uuid_schema),
+  prose_qoute: optional(uuid_schema),
 })
 
 
@@ -107,8 +107,8 @@ const status_schema = enum_schema(OrderStatusEnum);
 
 
 export const one_order_schema = object({
-  id: uuid_schema,
-  user_id: optional(uuid_schema),
+  _id: uuid_schema,
+  user: optional(uuid_schema),
   name: name_schema,
   phone: phone_schema,
   address: address_schema,
@@ -120,7 +120,7 @@ export const one_order_schema = object({
 })
 
 export const create_order_req = object({
-  user_id: optional(uuid_schema),
+  user: optional(uuid_schema),
   name: name_schema,
   phone: phone_schema,
   address: address_schema,
@@ -128,8 +128,8 @@ export const create_order_req = object({
 })
 
 export const create_order_res = object({
-  id: uuid_schema,
-  user_id: optional(uuid_schema),
+  _id: uuid_schema,
+  user: optional(uuid_schema),
   name: name_schema,
   phone: phone_schema,
   address: address_schema,
@@ -148,7 +148,7 @@ export const create_many_orders_res = object({
 })
 
 export const update_order_req = object({
-  user_id: optional(uuid_schema),
+  user: optional(uuid_schema),
   name: optional(name_schema),
   phone: optional(phone_schema),
   address: optional(address_schema),

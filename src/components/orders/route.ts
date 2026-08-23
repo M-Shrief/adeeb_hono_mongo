@@ -2,10 +2,9 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { sql, getTableColumns, eq } from 'drizzle-orm';
+import { QueryFilter, Types } from 'mongoose';
 /////
-import { db } from "../../database/index.js"
-import { OrderStatusEnum, RoleEnum, order_table, prints_table } from "../../database/schemas.js"
+import { OrderStatusEnum, RoleEnum, OrderModel, PrintModel } from "../../database/schemas.js"
 import { one_order_schema, create_order_req, create_order_res, create_many_orders_req, create_many_orders_res, create_print_res, create_print_req, update_order_req, update_print_req} from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
@@ -54,28 +53,34 @@ orders_route.get(
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
 
-            let [orders, counts] = await Promise.all([
-                await db.query.order_table.findMany({
-                    columns: {
-                        created_at: false,
-                        updated_at: false,
+
+            const result = await OrderModel.aggregate([
+                {
+                    $unset: ['created_at', 'updated_at', '__v'],
+                },
+                {
+                    $lookup: {
+                    from: 'prints',
+                    localField: '_id',
+                    foreignField: 'order',
+                    as: 'prints',
+                    pipeline: [
+                        {
+                            $unset: ["order", "user"],
+                        },
+                    ],
                     },
-                    with: {
-                        prints: {
-                            columns: {
-                                // already got them in order
-                                user_id: false, 
-                                order_id: false
-                            }
-                        }
-                    },
-                    limit: limit,
-                    offset: offset,
-                }),
-                await db.select({total_count: sql<number>`count(*) OVER()`.mapWith(Number)}).from(order_table)
-            ])
-            
-            let total_count = counts[0] ? counts[0].total_count : 0 
+                },
+                {
+                    $facet: {
+                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
+                        count: [ { $count: 'total_count' } ]          // Get count
+                    }
+                }
+            ]);
+
+            const orders = result[0].data;
+            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
 
             return c.json(
                 {
@@ -133,29 +138,35 @@ orders_route.get(
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
 
-            let [orders, counts] = await Promise.all([
-                await db.query.order_table.findMany({
-                    columns: {
-                        created_at: false,
-                        updated_at: false,
+            const result = await OrderModel.aggregate([
+                {
+                    $match: { user: new Types.UUID(user_id) },
+                },
+                {
+                    $unset: ['created_at', 'updated_at', '__v'],
+                },
+                {
+                    $lookup: {
+                    from: 'prints',
+                    localField: '_id',
+                    foreignField: 'order',
+                    as: 'prints',
+                    pipeline: [
+                        {
+                            $unset: ["order", "user"],
+                        },
+                    ],
                     },
-                    with: {
-                        prints: {
-                            columns: {
-                                // already got them in order's data
-                                user_id: false, 
-                                order_id: false
-                            }
-                        }
-                    },
-                    limit: limit,
-                    offset: offset,
-                    where: (order_table, { eq }) => eq(order_table.user_id, user_id),
-                }),
-                await db.select({total_count: sql<number>`count(*) OVER()`.mapWith(Number)}).from(order_table).where(eq(order_table.user_id, user_id))
-            ])
-            
-            let total_count = counts[0] ? counts[0].total_count : 0 
+                },
+                {
+                    $facet: {
+                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
+                        count: [ { $count: 'total_count' } ]          // Get count
+                    }
+                }
+            ]);
+            const orders = result[0].data;
+            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
 
             return c.json(
                 {
@@ -206,22 +217,29 @@ orders_route.get(
             if(cache_res) {
                 order = cache_res
             } else {
-                order = await db.query.order_table.findFirst({
-                        columns: {
-                            created_at: false,
-                            updated_at: false,
+                const result = await OrderModel.aggregate([
+                    {
+                        $match: { _id: new Types.UUID(id) },
+                    },
+                    {
+                        $unset: ['created_at', 'updated_at', '__v'],
+                    },
+                    {
+                        $lookup: {
+                        from: 'prints',
+                        localField: '_id',
+                        foreignField: 'order',
+                        as: 'prints',
+                        pipeline: [
+                            {
+                                $unset: ["order", "user"],
+                            },
+                        ],
                         },
-                        with: {
-                            prints: {
-                                columns: {
-                                    // already got them in order
-                                    user_id: false, 
-                                    order_id: false
-                                }
-                            }
-                        },
-                        where: (order_table, { eq }) => eq(order_table.id, id),
-                    })
+                    },
+                ]);
+
+                order = result.length != 0 ? result[0] : null
             }
 
             if (!order) {
@@ -261,32 +279,23 @@ orders_route.post(
             let data = await c.req.json()
             let delivery_schedule = new Date()
             delivery_schedule.setDate(delivery_schedule.getDate() + 7);
+            let order_data = { 
+                name: data.name,
+                phone: data.phone,
+                address: data.address,
+                reviewed: false,
+                is_updateable: true,
+                delivery_schedule: delivery_schedule,
+                status: OrderStatusEnum.IN_PROGRESS,
+                user: data.user
+            }
+            let new_order = await OrderModel.create({...order_data as any })
 
-            let new_order = await db
-                .insert(order_table)
-                .values({ 
-                    name: data.name,
-                    phone: data.phone,
-                    address: data.address,
-                    reviewed: false,
-                    is_updateable: true,
-                    delivery_schedule: delivery_schedule,
-                    status: OrderStatusEnum.IN_PROGRESS,
-                    user_id: data.user_id
-                })
-                // .onConflictDoNothing()
-                .returning()
-                .then(res => res[0])
+            let prints_data = data.prints.map((item: any) => { return {...item, user: new_order.get("user"), order: new_order.get("_id")}})
+            let new_prints = await PrintModel.create([...prints_data])
 
-            let prints_data = data.prints.map((item: any) => { return {...item, user_id: new_order.user_id, order_id: new_order.id}})
-            let new_prints = await db
-                .insert(prints_table)
-                .values([...prints_data])
-                .onConflictDoNothing()
-                .returning()
-
-
-            return c.json({...new_order, prints: new_prints}, HttpStatusCode.CREATED)
+            // We specifiy new_order._doc field to get the created records values, without it's metadata
+            return c.json({...new_order._doc, prints: new_prints}, HttpStatusCode.CREATED)
 
 
         } catch(e) {
@@ -332,30 +341,23 @@ orders_route.post(
 
             let new_orders: any[] = []
             for (let order of data as any[]) {
-                let new_order = await db
-                    .insert(order_table)
-                    .values({ 
-                        name: order.name,
-                        phone: order.phone,
-                        address: order.address,
-                        reviewed: false,
-                        is_updateable: true,
-                        delivery_schedule: delivery_schedule,
-                        status: OrderStatusEnum.IN_PROGRESS,
-                        user_id: order.user_id
-                    })
-                    // .onConflictDoNothing()
-                    .returning()
-                    .then(res => res[0])
+                let order_data = { 
+                    name: order.name,
+                    phone: order.phone,
+                    address: order.address,
+                    reviewed: false,
+                    is_updateable: true,
+                    delivery_schedule: delivery_schedule,
+                    status: OrderStatusEnum.IN_PROGRESS,
+                    user: order.user
+                }
+                let new_order = await OrderModel.create({...order_data as any })
 
-                let prints_data = order.prints.map((item: any) => { return {...item, user_id: new_order.user_id, order_id: new_order.id}})
-                let new_prints = await db
-                    .insert(prints_table)
-                    .values([...prints_data])
-                    .onConflictDoNothing()
-                    .returning()
+                let prints_data = order.prints.map((item: any) => { return {...item, user: new_order.get("user"), order: new_order.get("_id")}})
+                let new_prints = await PrintModel.create([...prints_data])
 
-                new_orders.push({...new_order, prints: new_prints})
+                // We specifiy new_order._doc field to get the created records values, without it's metadata
+                new_orders.push({...new_order._doc, prints: new_prints})
             }
 
 
@@ -400,15 +402,12 @@ orders_route.post(
             }
 
             let order_id = c.req.param("order_id")
-            let existing_order = await db.query.order_table.findFirst({
-                columns: {
-                    id: true,
-                    user_id: true,
-                    is_updateable: true,
-                },
-                where: (order_table, { eq }) => eq(order_table.id, order_id),
-            })
 
+            const existing_order = await OrderModel.findById(order_id, {
+                _id: 1,
+                user: 1,
+                is_updateable: 1
+            })
             if (!existing_order) {
                 return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
             }
@@ -418,23 +417,21 @@ orders_route.post(
             let permissions = payload["permissions"] as string[]
             let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
-                if (check_ownership(existing_order.user_id, payload) == false) {
+                let order_user = existing_order.get("user") 
+                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+                if (check_ownership(val, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
                 }
                 // if it's owner, we need to check if he can update it or not
-                if (!existing_order.is_updateable) { 
+                if (!existing_order.get("is_updateable")) { 
                     return c.json({ message: "Not Authorized to update order's data"}, HttpStatusCode.UNAUTHORIZED) 
                 }
             }
 
 
             let data = await c.req.json()
-            let print_data = {...data, user_id: user_id, order_id: order_id}
-            let new_print = await db
-                .insert(prints_table)
-                .values(print_data)
-                .onConflictDoNothing()
-                .returning()
+            let print_data = {...data, user: user_id, order: order_id}
+            let new_print = await PrintModel.create({...print_data})
 
             return c.json(new_print, HttpStatusCode.CREATED)
 
@@ -470,15 +467,11 @@ orders_route.put(
             }
 
             let id = c.req.param("id")
-            let existing_order = await db.query.order_table.findFirst({
-                columns: {
-                    id: true,
-                    user_id: true,
-                    is_updateable: true,
-                },
-                where: (order_table, { eq }) => eq(order_table.id, id),
+            const existing_order = await OrderModel.findById(id, {
+                _id: 1,
+                user: 1,
+                is_updateable: 1
             })
-
             if (!existing_order) {
                 return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
             }
@@ -487,11 +480,13 @@ orders_route.put(
             let permissions = payload["permissions"] as string[]
             let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
-                if (check_ownership(existing_order.user_id, payload) == false) {
+                let order_user = existing_order.get("user") 
+                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+                if (check_ownership(val, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
                 }
                 // if it's owner, we need to check if he can update it or not
-                if (!existing_order.is_updateable) {
+                if (!existing_order.get("is_updateable")) {
                     return c.json({ message: "Not Authorized to update order's data"}, HttpStatusCode.UNAUTHORIZED) 
                 }
                 // if it's updated by the owner, then remove admin's related fields -- aka assign them to undefine.
@@ -513,7 +508,8 @@ orders_route.put(
                 data.status = OrderStatusEnum.IN_PROGRESS
             }
 
-            await db.update(order_table).set({...data, updated_at: sql`NOW()`}).where(eq(order_table.id, id))
+            let filter_q: QueryFilter<typeof OrderModel> = { _id: new Types.UUID(id) }
+            await OrderModel.updateOne( filter_q, { $set: { ...data} })
 
             // Delete from cache after update to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)
@@ -555,13 +551,10 @@ orders_route.put(
             }
 
             let order_id = c.req.param("order_id")
-            let existing_order = await db.query.order_table.findFirst({
-                columns: {
-                    id: true,
-                    user_id: true,
-                    is_updateable: true,
-                },
-                where: (order_table, { eq }) => eq(order_table.id, order_id),
+            const existing_order = await OrderModel.findById(order_id, {
+                _id: 1,
+                user: 1,
+                is_updateable: 1
             })
 
             if (!existing_order) {
@@ -572,18 +565,21 @@ orders_route.put(
             let permissions = payload["permissions"] as string[]
             let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
-                if (check_ownership(existing_order.user_id, payload) == false) {
+                let order_user = existing_order.get("user") 
+                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+                if (check_ownership(val, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
                 }
                 // if it's owner, we need to check if he can update it or not
-                if (!existing_order.is_updateable) {
+                if (!existing_order.get("is_updateable")) {
                     return c.json({ message: "Not Authorized to update print's data"}, HttpStatusCode.UNAUTHORIZED) 
                 }
             }
 
 
             let print_id = c.req.param("print_id")
-            await db.update(prints_table).set({...data, updated_at: sql`NOW()`}).where(eq(prints_table.id, print_id))
+            
+            await PrintModel.updateOne( {_id: new Types.UUID(print_id)}, { $set: { ...data} })
 
             // Delete from cache after update to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, order_id)
@@ -622,13 +618,10 @@ orders_route.delete(
             }
 
             let order_id = c.req.param("id")
-            let existing_order = await db.query.order_table.findFirst({
-                columns: {
-                    id: true,
-                    user_id: true,
-                    is_updateable: true,
-                },
-                where: (order_table, { eq }) => eq(order_table.id, order_id),
+            const existing_order = await OrderModel.findById(order_id, {
+                _id: 1,
+                user: 1,
+                is_updateable: 1
             })
 
             if (!existing_order) {
@@ -639,18 +632,21 @@ orders_route.delete(
             let permissions = payload["permissions"] as string[]
             let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
-                if (check_ownership(existing_order.user_id, payload) == false) {
+                let order_user = existing_order.get("user") 
+                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+                if (check_ownership(val, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
                 }
                 // if it's owner, we need to check if he can delete it or not
-                if (!existing_order.is_updateable) {
+                if (!existing_order.get("is_updateable")) {
                     return c.json({ message: "Not Authorized to delete print"}, HttpStatusCode.UNAUTHORIZED) 
                 }
             }
 
             let id = c.req.param("id")
-            await db.delete(prints_table).where(eq(prints_table.order_id, id))
-            await db.delete(order_table).where(eq(order_table.id, id))
+            await PrintModel.deleteMany({ order: new Types.UUID(id) })
+            let filter_q: QueryFilter<typeof OrderModel> = { _id: new Types.UUID(id) }
+            await OrderModel.deleteOne( filter_q)
 
             // Delete from cache after update to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)
@@ -690,13 +686,10 @@ orders_route.delete(
             }
 
             let order_id = c.req.param("order_id")
-            let existing_order = await db.query.order_table.findFirst({
-                columns: {
-                    id: true,
-                    user_id: true,
-                    is_updateable: true,
-                },
-                where: (order_table, { eq }) => eq(order_table.id, order_id),
+            const existing_order = await OrderModel.findById(order_id, {
+                _id: 1,
+                user: 1,
+                is_updateable: 1
             })
 
             if (!existing_order) {
@@ -706,18 +699,20 @@ orders_route.delete(
             let permissions = payload["permissions"] as string[]
             let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
-                if (check_ownership(existing_order.user_id, payload) == false) {
+                let order_user = existing_order.get("user") 
+                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+                if (check_ownership(val, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
                 }
                 // if it's owner, we need to check if he can delete it or not
-                if (!existing_order.is_updateable) {
+                if (!existing_order.get("is_updateable")) {
                     return c.json({ message: "Not Authorized to delete print"}, HttpStatusCode.UNAUTHORIZED) 
                 }
             }
 
 
             let print_id = c.req.param("print_id")
-            await db.delete(prints_table).where(eq(prints_table.id, print_id))
+            await PrintModel.deleteOne({ _id: new Types.UUID(print_id) })
 
             // Delete from cache after update to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, order_id)
