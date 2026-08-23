@@ -279,7 +279,7 @@ export const print_schema = new Schema(
         prose_qoute: prose_qoute_ref_optional
     },
     {
-        timestamps: timestamps_schema
+        timestamps: false
     }
 )
 
