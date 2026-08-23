@@ -22,13 +22,13 @@ const source_schema = pipe(string(), trim(), minLength(4), maxLength(128));
 
 
 export const one_schema = object({
-  id: uuid_schema,
+  _id: uuid_schema,
   qoute: qoute_schema,
   source: optional(source_schema),
   tags: tags_schema,
   reviewed: reviewed_schema,
 
-  adeeb_id: uuid_schema,
+  adeeb: uuid_schema,
 })
 
 export const create_one_req = object({
@@ -37,17 +37,17 @@ export const create_one_req = object({
   tags: tags_schema,
   reviewed: reviewed_schema,
 
-  adeeb_id: uuid_schema,
+  adeeb: uuid_schema,
 });
 
 export const create_one_res = object({
-  id: uuid_schema,
+  _id: uuid_schema,
   qoute: qoute_schema,
   source: optional(source_schema),
   tags: tags_schema,
   reviewed: reviewed_schema,
 
-  adeeb_id: uuid_schema,
+  adeeb: uuid_schema,
 
   created_at, 
   updated_at,
@@ -66,5 +66,5 @@ export const update_req = object({
   tags: optional(tags_schema),
   reviewed: optional(reviewed_schema),
 
-  adeeb_id: optional(uuid_schema),
+  adeeb: optional(uuid_schema),
 });

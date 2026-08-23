@@ -2,10 +2,9 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { sql, getTableColumns, eq } from 'drizzle-orm';
+import { QueryFilter, Types } from 'mongoose';
 /////
-import { db } from "../../database/index.js"
-import { prose_qoutes_table } from "../../database/schemas.js"
+import { ProseQouteModel } from "../../database/schemas.js"
 import { one_schema, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
@@ -33,17 +32,22 @@ prose_qoute_route.get(
         try {
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
-            // We make 2 seperate queries, to get the data & the total_count of rows.
-            // we can make 1 query, but we'll need to make manual transformation
-            // so that we remove the count field from every item in the array.
-            let { created_at, updated_at, ...rest} = getTableColumns(prose_qoutes_table) // select all columns, except created_at & updated_at.
-            let [prose_qoutes, counts] = await Promise.all([
-                await db.select({...rest}).from(prose_qoutes_table).limit(limit).offset(offset),
-                await db.select({total_count: sql<number>`count(*) OVER()`.mapWith(Number)}).from(prose_qoutes_table)
-            ])
-            
-            let total_count = counts[0] ? counts[0].total_count : 0 
 
+            const result = await ProseQouteModel.aggregate([
+                {
+                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
+                },
+                {
+                    $facet: {
+                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
+                        count: [ { $count: 'total_count' } ]          // Get count
+                    }
+                }
+            ]);
+
+            const prose_qoutes = result[0].data;
+            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
+            
             return c.json(
                 {
                     data: prose_qoutes,
@@ -84,17 +88,15 @@ prose_qoute_route.get(
                 return c.json(cache_res, HttpStatusCode.OK)
             }
 
-            let prose_qoute = await db.query.prose_qoutes_table.findFirst({
-                columns: {
-                    id: true,
-                    qoute: true,
-                    source: true,
-                    tags: true,
-                    adeeb_id: true,
-                    reviewed: true,
-                },
-                where: (prose_qoutes_table, { eq }) => eq(prose_qoutes_table.id, id),
-            })
+            let prose_qoute = await ProseQouteModel.findById(id, {
+                tags: 1,
+                qoute: 1,
+                source: 1,
+                reviewed: 1,
+                //
+                adeeb: 1,
+                }).populate('adeeb', ['name', 'time_period']);
+
             if (!prose_qoute) {
                 return c.json({message: "ProseQoute's not Found"}, HttpStatusCode.NOT_FOUND)
             }
@@ -128,20 +130,12 @@ prose_qoute_route.post(
     async(c) => {
         try {
             let new_data = await c.req.json()
-            let new_prose_qoute = await db
-                .insert(prose_qoutes_table)
-                .values(new_data)
-                // .onConflictDoNothing()
-                .returning()
-                .then(res => res[0])
-            
-            // if the first item in res[0] is undefined,
-            // then there was a conflict and it already exists
-            if (!new_prose_qoute) {
-                return c.json({ message: "ProseQoute already exists"}, HttpStatusCode.NOT_ACCEPTABLE) 
-            }
+            let new_prose_qoute = await ProseQouteModel.create({...new_data})
             return c.json(new_prose_qoute, HttpStatusCode.CREATED)
-        } catch(e) {
+        } catch(e: any) {
+            if (e.code === 11000) { // Handle Duplicate Key Error
+                return c.json({ message: "ProseQoute already exists"}, HttpStatusCode.CONFLICT) 
+            }
             logger.error({error:e}, "Error in POST /prose_qoutes")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -164,12 +158,16 @@ prose_qoute_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many ProseQoutes"),
     async (c) => {
         try {
-            let new_data = await c.req.json()
-            let new_prose_qoutes = await db
-                .insert(prose_qoutes_table)
-                .values(new_data)
-                // .onConflictDoNothing()
-                .returning()
+            let new_data: any[] = await c.req.json()
+            let new_prose_qoutes: any[] = [] 
+            for(let prose_qoute of new_data) {
+                try {
+                    let new_prose_qoute = await ProseQouteModel.create(prose_qoute);
+                    new_prose_qoutes.push(new_prose_qoute)
+                } catch(e) {
+                    continue
+                }
+            }
 
             return c.json({created_items: new_prose_qoutes, success_count: new_prose_qoutes.length, failed_count: new_data.length - new_prose_qoutes.length}, HttpStatusCode.CREATED)
         } catch(e) {
@@ -199,7 +197,8 @@ prose_qoute_route.put(
             let id = c.req.param("id")
             let data = await c.req.json()
             
-            await db.update(prose_qoutes_table).set({...data, updated_at: sql`NOW()`}).where(eq(prose_qoutes_table.id, id))
+            let filter_q: QueryFilter<typeof ProseQouteModel> = { _id: new Types.UUID(id) }
+            await ProseQouteModel.updateOne( filter_q, { $set: { ...data} })
 
             // Delete from cache after update to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)
@@ -231,7 +230,8 @@ prose_qoute_route.delete(
         try {
             let id = c.req.param("id")
             
-            await db.delete(prose_qoutes_table).where(eq(prose_qoutes_table.id, id))
+            let filter_q: QueryFilter<typeof ProseQouteModel> = { _id: new Types.UUID(id) }
+            await ProseQouteModel.deleteOne( filter_q)
 
             // Delete from cache after delete to prevent showing old data
             let cache_key = format_key_by_id(cache_prefix, id)
