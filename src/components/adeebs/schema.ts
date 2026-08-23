@@ -24,7 +24,7 @@ const bio_schema = pipe(string(), trim(), minLength(4), maxLength(1024));
 
 
 export const one_schema = object({
-  id: uuid_schema,
+  _id: uuid_schema,
   name: name_schema,
   time_period: time_period_schema,
   bio: bio_schema,
@@ -39,7 +39,7 @@ export const create_one_req = object({
 });
 
 export const create_one_res = object({
-  id: uuid_schema,
+  _id: uuid_schema,
   name: name_schema,
   time_period: time_period_schema,
   bio: bio_schema,

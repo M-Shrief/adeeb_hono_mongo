@@ -18,7 +18,7 @@ const intro_schema = pipe(string(), trim(), minLength(4), maxLength(256));
 
 
 export const one_schema = object({
-  id: uuid_schema,
+  _id: uuid_schema,
   adeeb: uuid_schema,
   intro: intro_schema,
   verses: verses_schema,
@@ -35,7 +35,7 @@ export const create_one_req = object({
 });
 
 export const create_one_res = object({
-  id: uuid_schema,
+  _id: uuid_schema,
   adeeb: uuid_schema,
   intro: intro_schema,
   verses: verses_schema,
