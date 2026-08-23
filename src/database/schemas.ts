@@ -282,3 +282,5 @@ export const print_schema = new Schema(
         timestamps: timestamps_schema
     }
 )
+
+export const PrintModel = conn.model("Print", order_schema)
