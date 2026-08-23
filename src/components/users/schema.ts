@@ -22,7 +22,7 @@ const roles_schema = array(enum_schema(RoleEnum));
 
 
 export const one_schema = object({
-  id: uuid_schema,
+  _id: uuid_schema,
   username: username_schema,
   roles: roles_schema
 })

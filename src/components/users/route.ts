@@ -2,10 +2,9 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { sql, getTableColumns, eq } from 'drizzle-orm';
+import { QueryFilter, Types } from 'mongoose';
 /////
-import { db } from "../../database/index.js"
-import { RoleEnum, user_table } from "../../database/schemas.js"
+import { RoleEnum, UserModel } from "../../database/schemas.js"
 import { one_schema, signup_req, login_req, user_authorized_res, update_current_req, update_one_req } from './schema.js'
 ///// Utils
 import { logger } from '../../utils/logger.js';
@@ -56,13 +55,20 @@ users_route.get(
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
 
-            let { id, username, roles} = getTableColumns(user_table) // select all columns, except created_at & updated_at.
-            let [users, counts] = await Promise.all([
-                await db.select({ id, username, roles }).from(user_table).limit(limit).offset(offset),
-                await db.select({total_count: sql<number>`count(*) OVER()`.mapWith(Number)}).from(user_table)
-            ])
-            
-            let total_count = counts[0] ? counts[0].total_count : 0 
+            const result = await UserModel.aggregate([
+                {
+                    $unset: ['password', 'reviewed', 'created_at', 'updated_at', '__v'],
+                },
+                {
+                    $facet: {
+                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
+                        count: [ { $count: 'total_count' } ]          // Get count
+                    }
+                }
+            ]);
+
+            const users = result[0].data;
+            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
 
             return c.json(
                 {
@@ -116,14 +122,11 @@ users_route.get(
             let user = payload["user"] as any
             let id = user.id
 
-            let existing_user = await db.query.user_table.findFirst({
-                columns: {
-                    id: true,
-                    username: true,
-                    roles: true,
-                },
-                where: (user_table, { eq }) => eq(user_table.id, id),
-            })
+            let existing_user = await UserModel.findById(id, {
+                _id: 1,
+                username: 1,
+                roles: 1,
+            });
 
             if (!existing_user) {
                 return c.json({message: "User's not Found"}, HttpStatusCode.NOT_FOUND)
@@ -142,7 +145,7 @@ users_route.get(
     "/users/:id",
     describeRoute({
         tags: ["Users"],
-        summary: "Get One",
+        summary: "Get User By ID",
         ...describe_jwt_security,
         responses: {
            ...get_described_route(HttpStatusCode.OK, "Get Current User", one_schema),
@@ -174,14 +177,11 @@ users_route.get(
             }
             
             let id = c.req.param("id")
-            let existing_user = await db.query.user_table.findFirst({
-                columns: {
-                    id: true,
-                    username: true,
-                    roles: true,
-                },
-                where: (user_table, { eq }) => eq(user_table.id, id),
-            })
+            let existing_user = await UserModel.findById(id, {
+                _id: 1,
+                username: 1,
+                roles: 1,
+            });
 
             if (!existing_user) {
                 return c.json({message: "User's not Found"}, HttpStatusCode.NOT_FOUND)
@@ -217,20 +217,16 @@ users_route.post(
             let roles = new Set<RoleEnumType>(new_data.roles as RoleEnumType[])
             roles.add(RoleEnum.NORMAL)
 
-            let new_user = await db
-                .insert(user_table)
-                .values({username: new_data.username, password: hashed_pass, roles: [...roles]})
-                .onConflictDoNothing({ target: [user_table.username] })
-                .returning()
-                .then(res => res[0])
-            if (!new_user) {
-                return c.json({ message: "User already exists"}, HttpStatusCode.NOT_ACCEPTABLE) 
-            }
+            let new_user = await UserModel.create({username: new_data.username, password: hashed_pass, roles: [...roles] as any} )
+               
+            let access_token = await sign_token(new_user.get("_id").toString(), new_user.get("username"), new_user.get("roles"))
 
-            let access_token = await sign_token(new_user.id, new_user.username, new_user.roles)
 
             return c.json({user: {id: new_user.id, username: new_user.username, roles: new_user.roles}, access_token}, HttpStatusCode.CREATED)
-        } catch(e) {
+        } catch(e: any) {
+            if (e.code === 11000) { // Handle Duplicate Key Error
+                return c.json({ message: "User already exists"}, HttpStatusCode.CONFLICT) 
+            }
             logger.error({error:e}, "Error in POST /users/signup")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -253,26 +249,24 @@ users_route.post(
         try {
             let login_data = await c.req.json()
 
-            let existing_user = await db.query.user_table.findFirst({
-                columns: {
-                    id: true,
-                    username: true,
-                    password: true,
-                    roles: true,
-                },
-                where: (user_table, { eq }) => eq(user_table.username, login_data.username),
+            let filter_q: QueryFilter<typeof UserModel> = { username:  login_data.username}
+            let existing_user = await UserModel.findOne(filter_q, {
+                _id: 1,
+                username: 1,
+                password: 1,
+                roles: 1,
             })
 
             if (!existing_user) {
                 return c.json({ message: "Username doesn't exist"}, HttpStatusCode.UNAUTHORIZED) 
             }
             
-            let pass_is_correct = await compare_password(login_data.password, existing_user.password)
+            let pass_is_correct = await compare_password(login_data.password, existing_user.get("password"))
             if (!pass_is_correct) {
                 return c.json({ message: "Password isn't correct"}, HttpStatusCode.UNAUTHORIZED) 
             }
 
-            let access_token = await sign_token(existing_user.id, existing_user.username, existing_user.roles)
+            let access_token = await sign_token(existing_user.id, existing_user.get("username"), existing_user.get("roles"))
 
             return c.json({user: {id: existing_user.id, username: existing_user.username, roles: existing_user.roles}, access_token}, HttpStatusCode.CREATED)
         } catch(e) {
@@ -318,13 +312,14 @@ users_route.put(
             let user = payload["user"] as any
             let id = user.id
 
-            // set() ignores fields with undefined value, so we don't need conditions
             let new_data = await c.req.json()
             let hashed_pass = undefined
             if (new_data.password) {
                 hashed_pass = await hash_password(new_data.password)
             }
-            await db.update(user_table).set({username: new_data.username, password: hashed_pass, updated_at: sql`NOW()`}).where(eq(user_table.id, id))
+
+            let filter_q: QueryFilter<typeof UserModel> = { _id: new Types.UUID(id) }
+            await UserModel.updateOne( filter_q, { $set: {username: new_data.username, password: hashed_pass }})
 
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
         } catch(e) {
@@ -387,7 +382,9 @@ users_route.put(
                 roles.add(RoleEnum.NORMAL)
                 roles = [...roles]
             }
-            await db.update(user_table).set({username: new_data.username, password: hashed_pass, roles: roles, updated_at: sql`NOW()`}).where(eq(user_table.id, id))
+
+            let filter_q: QueryFilter<typeof UserModel> = { _id: new Types.UUID(id) }
+            await UserModel.updateOne( filter_q, { $set: {username: new_data.username, password: hashed_pass, roles: roles }})
 
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)            
         } catch(e) {
@@ -434,7 +431,8 @@ users_route.delete(
             let user = payload["user"] as any
             let id = user.id
 
-            await db.delete(user_table).where(eq(user_table.id, id))
+            let filter_q: QueryFilter<typeof UserModel> = { _id: new Types.UUID(id) }
+            await UserModel.deleteOne( filter_q)
 
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
             
@@ -482,7 +480,8 @@ users_route.delete(
             
             let id = c.req.param("id")
 
-            await db.delete(user_table).where(eq(user_table.id, id))
+            let filter_q: QueryFilter<typeof UserModel> = { _id: new Types.UUID(id) }
+            await UserModel.deleteOne( filter_q)
 
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)            
         } catch(e) {
