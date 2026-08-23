@@ -183,7 +183,7 @@ export const OrderStatusEnum = {
 } as const
 
 export const order_schema = new Schema(
-        {
+    {
         _id: uuid_schema,
         name: {
             type: String,
@@ -283,4 +283,5 @@ export const print_schema = new Schema(
     }
 )
 
-export const PrintModel = conn.model("Print", order_schema)
+export const PrintModel = conn.model("Print", print_schema)
+
