@@ -149,7 +149,7 @@ export const verify_adminstrator = () =>
     }
 
     let permissions = payload["permissions"] as string[]
-    let is_adminstrator = check_if_adminstrator(permissions, OP.READ)
+    let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
     if (!is_adminstrator) {
         return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
     }
