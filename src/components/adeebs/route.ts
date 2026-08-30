@@ -5,7 +5,7 @@ import {
 import {Error as MError, Types, QueryFilter} from "mongoose"
 /////
 import { AdeebModel } from "../../database/schemas.js"
-import { one_schema, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
+import { one_schema, get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
@@ -72,7 +72,7 @@ adeeb_route.get(
         tags: ["Adeebs"],
         summary: "Get One",
         responses: {
-           ...get_described_route(HttpStatusCode.OK, "Get Adeeb", one_schema),
+           ...get_described_route(HttpStatusCode.OK, "Get Adeeb", get_one_res),
            ...get_described_route(HttpStatusCode.NOT_FOUND, "Adeeb's not Found", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
         },
@@ -95,7 +95,46 @@ adeeb_route.get(
                 },
                 {
                     $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
-                }
+                },
+                {
+                    $lookup: {
+                    from: 'poems',
+                    localField: '_id',
+                    foreignField: 'adeeb',
+                    as: 'poems',
+                    pipeline: [
+                        {
+                            $unset: ['adeeb', 'verses', 'is_couplet', 'reviewed', 'created_at', 'updated_at', '__v'],
+                        },
+                    ],
+                    },
+                },
+                {
+                    $lookup: {
+                    from: 'proseqoutes',
+                    localField: '_id',
+                    foreignField: 'adeeb',
+                    as: 'prose_qoutes',
+                    pipeline: [
+                        {
+                            $unset: ['adeeb', 'tags', 'reviewed', 'created_at', 'updated_at', '__v'],
+                        },
+                    ],
+                    },
+                },
+                {
+                    $lookup: {
+                    from: 'chosenverses',
+                    localField: '_id',
+                    foreignField: 'adeeb',
+                    as: 'chosen_verses',
+                    pipeline: [
+                        {
+                            $unset: ['adeeb', 'poem', 'tags', 'reviewed', 'created_at', 'updated_at', '__v'],
+                        },
+                    ],
+                    },
+                },
             ]);
             if (result.length == 0) {
                 return c.json({message: "Adeeb's not Found"}, HttpStatusCode.NOT_FOUND)
