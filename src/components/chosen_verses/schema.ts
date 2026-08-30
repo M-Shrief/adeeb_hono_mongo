@@ -22,6 +22,12 @@ export const one_schema = object({
   poem_id: uuid_schema,
 })
 
+export const minimal_schema = object({
+  _id: uuid_schema,
+  verses: verses_schema,
+  is_couplet: is_couplet_schema,
+})
+
 export const create_one_req = object({
   tags: tags_schema,
   verses: verses_schema,

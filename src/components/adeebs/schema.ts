@@ -31,6 +31,12 @@ export const one_schema = object({
   reviewed: reviewed_schema
 })
 
+export const minimal_schema = object({
+  _id: uuid_schema,
+  name: name_schema,
+})
+
+
 export const create_one_req = object({
   name: name_schema,
   time_period: time_period_schema,

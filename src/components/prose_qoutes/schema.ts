@@ -31,6 +31,12 @@ export const one_schema = object({
   adeeb: uuid_schema,
 })
 
+export const minimal_schema = object({
+  _id: uuid_schema,
+  qoute: qoute_schema,
+})
+
+
 export const create_one_req = object({
   qoute: qoute_schema,
   source: optional(source_schema),
