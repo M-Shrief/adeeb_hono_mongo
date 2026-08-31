@@ -5,7 +5,9 @@ import {
 import { QueryFilter, Types } from 'mongoose';
 /////
 import { OrderStatusEnum, RoleEnum, OrderModel, PrintModel } from "../../database/schemas.js"
-import { one_order_schema, create_order_req, create_order_res, create_many_orders_req, create_many_orders_res, create_print_res, create_print_req, update_order_req, update_print_req} from './schema.js'
+import { one_schema as order_schema } from "../../schemas/order.js";
+import { one_schema as print_schema} from "../../schemas/print.js";
+import { create_order_req, create_order_res, create_many_orders_req, create_many_orders_res, create_print_res, create_print_req, update_order_req, update_print_req} from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { logger } from '../../utils/logger.js';
@@ -28,7 +30,7 @@ orders_route.get(
         summary: "Get All",
         ...describe_jwt_security,
         responses: {
-           ...get_described_route(HttpStatusCode.OK, "Get All Orders", get_all_schema(one_order_schema)),
+           ...get_described_route(HttpStatusCode.OK, "Get All Orders", get_all_schema(order_schema)),
            ...get_described_route(HttpStatusCode.UNAUTHORIZED, "Not Authorized", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
         },
@@ -107,7 +109,7 @@ orders_route.get(
         summary: "Current User Orders",
         ...describe_jwt_security,
         responses: {
-           ...get_described_route(HttpStatusCode.OK, "Get All Orders", get_all_schema(one_order_schema)),
+           ...get_described_route(HttpStatusCode.OK, "Get All Orders", get_all_schema(order_schema)),
            ...get_described_route(HttpStatusCode.UNAUTHORIZED, "Not Authorized", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
         },
@@ -194,7 +196,7 @@ orders_route.get(
         summary: "Get One",
         ...describe_jwt_security,
         responses: {
-           ...get_described_route(HttpStatusCode.OK, "Get Order", one_order_schema),
+           ...get_described_route(HttpStatusCode.OK, "Get Order", order_schema),
            ...get_described_route(HttpStatusCode.UNAUTHORIZED, "Not Authorized", base_response_schema),
            ...get_described_route(HttpStatusCode.NOT_FOUND, "NOT FOUND", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
