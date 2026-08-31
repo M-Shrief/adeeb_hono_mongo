@@ -12,7 +12,7 @@ import {
 } from 'valibot';
 /////////////
 import { TimePeriodEnum } from "../database/schemas.js"
-import { uuid_schema, reviewed_schema} from '../schemas/general.js';
+import { uuid_schema, reviewed_schema} from './general.js';
 
 
 export const name_schema = pipe(string(), trim(), minLength(4), maxLength(256));

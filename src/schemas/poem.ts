@@ -10,7 +10,7 @@ import {
   number,
 } from 'valibot';
 /////
-import { uuid_schema, verses_schema, is_couplet_schema, reviewed_schema } from '../schemas/general.js';
+import { uuid_schema, verses_schema, is_couplet_schema, reviewed_schema } from './general.js';
 
 export const intro_schema = pipe(string(), trim(), minLength(4), maxLength(256));
 
