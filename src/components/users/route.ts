@@ -9,7 +9,8 @@ import { one_schema, signup_req, login_req, user_authorized_res, update_current_
 ///// Utils
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { HttpStatusCode, base_response_schema, queries_schema_for_get_all_req, get_described_route, get_all_schema, describe_jwt_security } from '../../utils/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
+import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { check_if_adminstrator, compare_password, hash_password, sign_token, verify_token, create_permission, OP, check_permission, RoleEnumType } from "../../utils/auth.js"
 
 export const users_route = new Hono() 

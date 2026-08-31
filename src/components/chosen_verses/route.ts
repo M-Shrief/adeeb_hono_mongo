@@ -9,7 +9,8 @@ import { one_schema, create_many_req, create_many_res, create_one_req, create_on
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { HttpStatusCode, base_response_schema, queries_schema_for_get_all_req, get_described_route, get_all_schema, describe_jwt_security } from '../../utils/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
+import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
 
