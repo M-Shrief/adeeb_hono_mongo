@@ -69,7 +69,7 @@ orders_route.get(
                     as: 'prints',
                     pipeline: [
                         {
-                            $unset: ["order", "user"],
+                            $unset: ["order", "user", , "__v"],
                         },
                     ],
                     },
@@ -156,7 +156,7 @@ orders_route.get(
                     as: 'prints',
                     pipeline: [
                         {
-                            $unset: ["order", "user"],
+                            $unset: ["order", "user", "__v"],
                         },
                     ],
                     },
@@ -235,7 +235,7 @@ orders_route.get(
                         as: 'prints',
                         pipeline: [
                             {
-                                $unset: ["order", "user"],
+                                $unset: ["order", "user", , "__v"],
                             },
                         ],
                         },
