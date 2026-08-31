@@ -6,7 +6,8 @@ import { QueryFilter, Types } from 'mongoose';
 /////
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 import { PoemModel } from "../../database/schemas.js"
-import { one_schema, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
+import {one_schema} from "../../schemas/poem.js"
+import { get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
 import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
@@ -72,7 +73,7 @@ poem_route.get(
         tags: ["Poems"],
         summary: "Get One",
         responses: {
-           ...get_described_route(HttpStatusCode.OK, "Get Poem", one_schema),
+           ...get_described_route(HttpStatusCode.OK, "Get Poem", get_one_res),
            ...get_described_route(HttpStatusCode.NOT_FOUND, "Poem's not Found", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
         },
@@ -88,21 +89,55 @@ poem_route.get(
             if(cache_res) {
                 return c.json(cache_res, HttpStatusCode.OK)
             }
-            let poem = await PoemModel.findById(id, {
-                intro: 1,
-                verses: 1,
-                is_couplet: 1,
-                reviewed: 1,
-                //
-                adeeb: 1,
-                }).populate('adeeb', ['name']);
-            if (!poem) {
+
+            let result = await PoemModel.aggregate([
+                {
+                    $match: { _id: new Types.UUID(id) },
+                },
+                {
+                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
+                },
+                {
+                        $lookup: {
+                        from: 'adeebs', // Name of the collection to join (usually lowercase plural)
+                        localField: 'adeeb', // The ObjectId field in your schema
+                        foreignField: '_id', // The _id field in the target collection
+                        as: 'adeeb', // The new array field containing the joined document
+                        pipeline: [
+                            {
+                                $project: {
+                                    _id: 1,
+                                    name: 1
+                                },
+                            },
+                        ],
+                    }
+                },
+                {
+                    $unwind: '$adeeb' // Unwind to get a single object instead of an array
+                },
+                {
+                    $lookup: {
+                        from: 'chosenverses',
+                        localField: '_id',
+                        foreignField: 'poem',
+                        as: 'chosen_verses',
+                        pipeline: [
+                            {
+                                $unset: ['adeeb', 'poem', 'tags', 'reviewed', 'created_at', 'updated_at', '__v'],
+                            },
+                        ],
+                    },
+                }
+            ])
+            if (result.length == 0) {
                 return c.json({message: "Poem's not Found"}, HttpStatusCode.NOT_FOUND)
             }
-
+            
+            let poem = result[0]
             await cache_set(cache_key, poem)
 
-            return c.json(poem, HttpStatusCode.OK)
+            return c.json(poem[0], HttpStatusCode.OK)
         } catch(e) {
             logger.error({error:e}, "Error in GET /poems/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
