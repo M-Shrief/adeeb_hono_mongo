@@ -12,7 +12,7 @@ import {
 /////////////
 import { RoleEnum } from "../../database/schemas.js"
 // utils
-import { uuid_schema, created_at, updated_at } from '../../utils/schemas.js';
+import { uuid_schema, created_at, updated_at } from '../../schemas/general.js';
 
 
 const username_schema = pipe(string(), trim(), minLength(4), maxLength(256));

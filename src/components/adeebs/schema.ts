@@ -15,7 +15,7 @@ import { TimePeriodEnum } from "../../database/schemas.js"
 import { minimal_schema as poems_schema } from "../poems/schema.js"
 import { minimal_schema as chosen_verses_schema } from "../chosen_verses/schema.js"
 import { minimal_schema as prose_qoutes_schema } from "../prose_qoutes/schema.js"
-import { uuid_schema, reviewed_schema, created_at, updated_at } from '../../utils/schemas.js';
+import { uuid_schema, reviewed_schema, created_at, updated_at } from '../../schemas/general.js';
 
 
 const name_schema = pipe(string(), trim(), minLength(4), maxLength(256));

@@ -94,7 +94,7 @@ poem_route.get(
                 reviewed: 1,
                 //
                 adeeb: 1,
-                }).populate('adeeb', ['name', 'time_period']);
+                }).populate('adeeb', ['name']);
             if (!poem) {
                 return c.json({message: "Poem's not Found"}, HttpStatusCode.NOT_FOUND)
             }

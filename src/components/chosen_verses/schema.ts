@@ -7,7 +7,7 @@ import {
 } from 'valibot';
 /////////////
 // utils
-import { uuid_schema, tags_schema, reviewed_schema, created_at, updated_at, verses_schema, is_couplet_schema } from '../../utils/schemas.js';
+import { uuid_schema, tags_schema, reviewed_schema, created_at, updated_at, verses_schema, is_couplet_schema } from '../../schemas/general.js';
 
 
 

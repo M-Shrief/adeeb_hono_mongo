@@ -15,7 +15,7 @@ import {
 /////////////
 import { OrderStatusEnum, OutfitTypeEnum } from "../../database/schemas.js"
 // utils
-import { uuid_schema, verses_schema, is_couplet_schema, qoute_schema, reviewed_schema, created_at, updated_at } from '../../utils/schemas.js';
+import { uuid_schema, verses_schema, is_couplet_schema, qoute_schema, reviewed_schema, created_at, updated_at } from '../../schemas/general.js';
 
 
 // Prints ////////////////////////

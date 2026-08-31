@@ -3,6 +3,7 @@ import {
     string,
     uuid,
     optional,
+    number,
     object,
     array,
     boolean,
@@ -30,3 +31,8 @@ const date_schema = date()
 
 export const created_at = date_schema
 export const updated_at = date_schema
+
+export const invalid_item = object({
+  item_index: number(),
+  message: string(),
+})

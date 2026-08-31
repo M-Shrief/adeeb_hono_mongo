@@ -11,7 +11,7 @@ import {
 } from 'valibot';
 /////////////
 // utils
-import { uuid_schema, verses_schema, is_couplet_schema, reviewed_schema,  created_at, updated_at } from '../../utils/schemas.js';
+import { uuid_schema, verses_schema, is_couplet_schema, reviewed_schema,  created_at, updated_at } from '../../schemas/general.js';
 
 
 const intro_schema = pipe(string(), trim(), minLength(4), maxLength(256));

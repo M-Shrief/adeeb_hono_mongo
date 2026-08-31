@@ -13,7 +13,7 @@ import { auth_header_validator, id_param_validator, json_validator, param_valida
 import { HttpStatusCode, base_response_schema, queries_schema_for_get_all_req, get_described_route, get_all_schema, describe_jwt_security} from '../../utils/api.js';
 import { verify_token, create_permission, OP, check_permission, check_if_adminstrator, check_ownership} from "../../utils/auth.js"
 import { object } from 'valibot';
-import { uuid_schema } from '../../utils/schemas.js';
+import { uuid_schema } from '../../schemas/general.js';
 
 
 export const orders_route = new Hono() 
