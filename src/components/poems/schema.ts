@@ -10,25 +10,21 @@ import {
   number,
 } from 'valibot';
 /////////////
-// utils
 import { uuid_schema, verses_schema, is_couplet_schema, reviewed_schema,  created_at, updated_at } from '../../schemas/general.js';
+import { intro_schema } from "../../schemas/poem.js"
+import { minimal_schema as adeeb_schema } from "../../schemas/adeeb.js"
+import { minimal_schema as chosen_verses_schema } from "../chosen_verses/schema.js"
 
 
-const intro_schema = pipe(string(), trim(), minLength(4), maxLength(256));
 
-
-export const one_schema = object({
+export const get_one_res = object({
   _id: uuid_schema,
-  adeeb: uuid_schema,
   intro: intro_schema,
   verses: verses_schema,
   is_couplet: is_couplet_schema,
-  reviewed: reviewed_schema
-})
-
-export const minimal_schema = object({
-  _id: uuid_schema,
-  intro: intro_schema,
+  reviewed: reviewed_schema,
+  adeeb: adeeb_schema,
+  chosen_verses: array(chosen_verses_schema)
 })
 
 export const create_one_req = object({

@@ -13,7 +13,7 @@ import {
 /////////////
 import { uuid_schema, reviewed_schema, created_at, updated_at } from '../../schemas/general.js';
 import { name_schema, time_period_schema, bio_schema} from "../../schemas/adeeb.js"
-import { minimal_schema as poems_schema } from "../poems/schema.js"
+import { minimal_schema as poems_schema } from "../../schemas/poem.js"
 import { minimal_schema as chosen_verses_schema } from "../chosen_verses/schema.js"
 import { minimal_schema as prose_qoutes_schema } from "../prose_qoutes/schema.js"
 
