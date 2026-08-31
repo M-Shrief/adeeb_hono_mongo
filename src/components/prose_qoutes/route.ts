@@ -5,7 +5,8 @@ import {
 import { QueryFilter, Types } from 'mongoose';
 /////
 import { ProseQouteModel } from "../../database/schemas.js"
-import { one_schema, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
+import {one_schema} from "../../schemas/prose_qoute.js"
+import { get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
@@ -72,7 +73,7 @@ prose_qoute_route.get(
         tags: ["ProseQoutes"],
         summary: "Get One",
         responses: {
-           ...get_described_route(HttpStatusCode.OK, "Get ProseQoute", one_schema),
+           ...get_described_route(HttpStatusCode.OK, "Get ProseQoute", get_one_res),
            ...get_described_route(HttpStatusCode.NOT_FOUND, "ProseQoute's not Found", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
         },
@@ -96,7 +97,7 @@ prose_qoute_route.get(
                 reviewed: 1,
                 //
                 adeeb: 1,
-                }).populate('adeeb', ['name', 'time_period']);
+                }).populate('adeeb', ['_id', 'name']);
 
             if (!prose_qoute) {
                 return c.json({message: "ProseQoute's not Found"}, HttpStatusCode.NOT_FOUND)

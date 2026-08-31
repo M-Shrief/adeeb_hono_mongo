@@ -15,7 +15,7 @@ import { uuid_schema, reviewed_schema, created_at, updated_at } from '../../sche
 import { name_schema, time_period_schema, bio_schema} from "../../schemas/adeeb.js"
 import { minimal_schema as poems_schema } from "../../schemas/poem.js"
 import { minimal_schema as chosen_verses_schema } from "../../schemas/chosen_verse.js"
-import { minimal_schema as prose_qoutes_schema } from "../prose_qoutes/schema.js"
+import { minimal_schema as prose_qoutes_schema } from "../../schemas/prose_qoute.js"
 
 
 export const get_one_res = object({

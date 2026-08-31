@@ -1,41 +1,22 @@
 import {
-  pipe,
   optional,
   array,
   object,
-  string,
-  trim,
-  enum as enum_schema,
-  maxLength,
-  minLength,
   number,
 } from 'valibot';
 /////////////
-// utils
+import {source_schema} from "../../schemas/prose_qoute.js"
 import { uuid_schema, qoute_schema, tags_schema, reviewed_schema, created_at, updated_at } from '../../schemas/general.js';
+import { minimal_schema as adeeb_schema } from "../../schemas/adeeb.js"
 
-
-
-/** source is always used with optional()
-*/ 
-const source_schema = pipe(string(), trim(), minLength(4), maxLength(128));
-
-
-export const one_schema = object({
-  _id: uuid_schema,
+export const get_one_res = object({
   qoute: qoute_schema,
   source: optional(source_schema),
   tags: tags_schema,
   reviewed: reviewed_schema,
 
-  adeeb: uuid_schema,
-})
-
-export const minimal_schema = object({
-  _id: uuid_schema,
-  qoute: qoute_schema,
-})
-
+  adeeb: adeeb_schema,
+});
 
 export const create_one_req = object({
   qoute: qoute_schema,
