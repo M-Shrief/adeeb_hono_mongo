@@ -13,7 +13,7 @@ import {
 import { uuid_schema, verses_schema, is_couplet_schema, reviewed_schema,  created_at, updated_at } from '../../schemas/general.js';
 import { intro_schema } from "../../schemas/poem.js"
 import { minimal_schema as adeeb_schema } from "../../schemas/adeeb.js"
-import { minimal_schema as chosen_verses_schema } from "../chosen_verses/schema.js"
+import { minimal_schema as chosen_verses_schema } from "../../schemas/chosen_verse.js"
 
 
 

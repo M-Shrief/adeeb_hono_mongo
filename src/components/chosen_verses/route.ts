@@ -5,7 +5,8 @@ import {
 import { QueryFilter, Types } from 'mongoose';
 /////
 import { ChosenVerseModel } from '../../database/schemas.js';
-import { one_schema, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
+import {one_schema} from "../../schemas/chosen_verse.js"
+import { get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
@@ -74,7 +75,7 @@ chosen_verses_route.get(
         tags: ["ChosenVerses"],
         summary: "Get One",
         responses: {
-           ...get_described_route(HttpStatusCode.OK, "Get ChosenVerse", one_schema),
+           ...get_described_route(HttpStatusCode.OK, "Get ChosenVerse", get_one_res),
            ...get_described_route(HttpStatusCode.NOT_FOUND, "ChosenVerse's not Found", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
         },
@@ -100,7 +101,7 @@ chosen_verses_route.get(
                 adeeb: 1,
                 poem: 1,
                 })
-                .populate('adeeb', ['name', 'time_period'])
+                .populate('adeeb', ['_id', 'name'])
                 .populate('poem', ['_id', 'intro']);
             if (!chosen_verse) {
                 return c.json({message: "ChosenVerse's not Found"}, HttpStatusCode.NOT_FOUND)
