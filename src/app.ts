@@ -16,7 +16,8 @@ import { bodyLimit } from 'hono/body-limit'
 import { timeout } from 'hono/timeout'
 // utils
 import  {logger} from "./utils/logger.js"
-import { HttpStatusCode, base_response_schema, get_described_route } from "./utils/api.js"
+import { base_response_schema} from './schemas/api.js' 
+import { HttpStatusCode, get_described_route } from "./utils/api.js"
 // Components
 import { adeeb_route } from "./components/adeebs/route.js";
 import { poem_route } from "./components/poems/route.js";
