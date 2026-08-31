@@ -243,6 +243,8 @@ orders_route.get(
                 order = result.length != 0 ? result[0] : null
             }
 
+            await cache_set(cache_key, order)
+
             if (!order) {
                 return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
             }
@@ -269,7 +271,7 @@ orders_route.post(
         tags: ["Orders"],
         summary: "Create Order",
         responses: {
-           ...get_described_route(HttpStatusCode.CREATED, "Successful added Order", create_order_req),
+           ...get_described_route(HttpStatusCode.CREATED, "Successful added Order", create_order_res),
            ...get_described_route(HttpStatusCode.UNPROCESSABLE_ENTITY, "Invalid data for order", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
         },
