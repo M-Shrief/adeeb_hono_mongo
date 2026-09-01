@@ -5,7 +5,7 @@ import {
 import {  object } from 'valibot';
 ///
 import { HttpStatusCode } from "./api.js"
-import { uuid_schema } from "./schemas.js"
+import { uuid_schema } from "../schemas/general.js"
 import { auth_header_schema } from "./auth.js";
 
 
