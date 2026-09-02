@@ -11,7 +11,7 @@ import { create_order_req, create_order_res, create_many_orders_req, create_many
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, param_validator, query_validator } from '../../utils/validators.js'
-import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { verify_token, create_permission, OP, check_permission, check_if_adminstrator, check_ownership} from "../../utils/auth.js"
 import { object } from 'valibot';
@@ -339,24 +339,32 @@ orders_route.post(
             }
 
 
-            let data = await c.req.json()
+            let data: any[] = await c.req.json()
+            let new_adeebs: any[] = []
+            let invalid_items: InvalidItemType[] = []
             let delivery_schedule = new Date()
             delivery_schedule.setDate(delivery_schedule.getDate() + 7);
 
             let new_orders: any[] = []
-            for (let order of data as any[]) {
-                let order_data = { 
-                    name: order.name,
-                    phone: order.phone,
-                    address: order.address,
-                    reviewed: false,
-                    is_updateable: true,
-                    delivery_schedule: delivery_schedule,
-                    status: OrderStatusEnum.IN_PROGRESS,
-                    user: order.user
+            for (let [index, order] of data.entries()) {
+                let new_order: any
+                try{
+                    let order_data = { 
+                        name: order.name,
+                        phone: order.phone,
+                        address: order.address,
+                        reviewed: false,
+                        is_updateable: true,
+                        delivery_schedule: delivery_schedule,
+                        status: OrderStatusEnum.IN_PROGRESS,
+                        user: order.user
+                    }
+                    new_order = await OrderModel.create({...order_data as any })                    
+                } catch(e) {
+                    let msg: string = "Error inserting Order, try again later"
+                    invalid_items.push({item_index: index, message: msg})
+                    continue
                 }
-                let new_order = await OrderModel.create({...order_data as any })
-
                 let prints_data = order.prints.map((item: any) => { return {...item, user: new_order.get("user"), order: new_order.get("_id")}})
                 let new_prints = await PrintModel.create([...prints_data])
 

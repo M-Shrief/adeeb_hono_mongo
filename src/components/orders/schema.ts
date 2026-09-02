@@ -8,6 +8,7 @@ import {
 import { uuid_schema, verses_schema, is_couplet_schema, qoute_schema, reviewed_schema, created_at, updated_at } from '../../schemas/general.js';
 import { font_color_schema, font_type_schema, outfit_type_schema, outfit_color_schema } from '../../schemas/print.js';
 import { address_schema, delivery_schedule, is_updateable, name_schema, phone_schema, status_schema } from '../../schemas/order.js';
+import { create_many_schema } from '../../schemas/api.js';
 
 
 
@@ -87,11 +88,7 @@ export const create_order_res = object({
 })
 
 export const create_many_orders_req = array(create_order_req)
-export const create_many_orders_res = object({
-  created_items: array(create_order_res),
-  success_count: number(),
-  failed_count: number(),
-})
+export const create_many_orders_res = create_many_schema(create_order_res)
 
 export const update_order_req = object({
   user: optional(uuid_schema),
