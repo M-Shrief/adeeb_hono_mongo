@@ -9,7 +9,7 @@ import {one_schema} from "../../schemas/prose_qoute.js"
 import { get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
@@ -159,18 +159,23 @@ prose_qoute_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many ProseQoutes"),
     async (c) => {
         try {
+
             let new_data: any[] = await c.req.json()
-            let new_prose_qoutes: any[] = [] 
-            for(let prose_qoute of new_data) {
+            let new_prose_qoutes: any[] = []
+            let invalid_items: InvalidItemType[] = []
+            for(let [index, prose_qoute] of new_data.entries()) {
                 try {
                     let new_prose_qoute = await ProseQouteModel.create(prose_qoute);
                     new_prose_qoutes.push(new_prose_qoute)
-                } catch(e) {
+                } catch(e: any) {
+                    let msg: string = "Error inserting prose_qoute, try again later"
+                    invalid_items.push({item_index: index, message: msg})
                     continue
                 }
             }
 
-            return c.json({created_items: new_prose_qoutes, success_count: new_prose_qoutes.length, failed_count: new_data.length - new_prose_qoutes.length}, HttpStatusCode.CREATED)
+            return c.json({created_items: new_prose_qoutes, success_count: new_prose_qoutes.length, invalid_items}, HttpStatusCode.CREATED)
+
         } catch(e) {
             logger.error({error:e}, "Error in POST /prose_qoutes/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
