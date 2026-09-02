@@ -7,7 +7,6 @@ import { QueryFilter, Types } from 'mongoose';
 import { RoleEnum, UserModel } from "../../database/schemas.js"
 import { one_schema } from "../../schemas/user.js"
 import { signup_req, login_req, user_authorized_res, update_current_req, update_one_req } from './schema.js'
-///// Utils
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
 import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
