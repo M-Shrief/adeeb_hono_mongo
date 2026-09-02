@@ -9,7 +9,6 @@ import { one_schema as order_schema } from "../../schemas/order.js";
 import { one_schema as print_schema} from "../../schemas/print.js";
 import { create_order_req, create_order_res, create_many_orders_req, create_many_orders_res, create_print_res, create_print_req, update_order_req, update_print_req} from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
-///// Utils
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, param_validator, query_validator } from '../../utils/validators.js'
 import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
@@ -69,7 +68,7 @@ orders_route.get(
                     as: 'prints',
                     pipeline: [
                         {
-                            $unset: ["order", "user", , "__v"],
+                            $unset: ["order", "user", "__v"],
                         },
                     ],
                     },
@@ -235,7 +234,7 @@ orders_route.get(
                         as: 'prints',
                         pipeline: [
                             {
-                                $unset: ["order", "user", , "__v"],
+                                $unset: ["order", "user", "__v"],
                             },
                         ],
                         },
@@ -245,11 +244,11 @@ orders_route.get(
                 order = result.length != 0 ? result[0] : null
             }
 
-            await cache_set(cache_key, order)
-
             if (!order) {
                 return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
             }
+
+            await cache_set(cache_key, order)
 
             let permissions = payload["permissions"] as string[]
             let is_authorized = check_if_adminstrator(permissions, OP.READ)
