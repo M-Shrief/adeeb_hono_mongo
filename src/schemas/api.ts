@@ -1,4 +1,4 @@
-import { array, maxValue, minValue, number, object, optional, pipe, string } from "valibot";
+import { InferInput, array, maxValue, minValue, number, object, optional, pipe, string } from "valibot";
 /////////////
 
 
@@ -25,5 +25,24 @@ export function get_all_schema(item_schema: any) {
     limit: number(),
     offset: number(),
     total_count: number(),
+  })
+}
+
+const invalid_item = object({
+  item_index: number(),
+  message: string()
+})
+
+export type InvalidItemType = InferInput<typeof invalid_item>; // { email: string; password: string }
+
+/**
+ * Shared schema for response to create many requests
+ * @param item_schema schema for a successful created item
+ */
+export function create_many_schema(item_schema: any) {
+  return object({
+    created_items: array(item_schema),
+    success_count: number(),
+    invalid_items: array(invalid_item),
   })
 }
