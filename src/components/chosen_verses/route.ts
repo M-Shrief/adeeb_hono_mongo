@@ -10,7 +10,7 @@ import { get_one_res, create_many_req, create_many_res, create_one_req, create_o
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
@@ -167,18 +167,21 @@ chosen_verses_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many ChosenVerses"),
     async (c) => {
         try {
-            let new_chosen_verses: any[] = []
             let new_data: any[] = await c.req.json()
-            for(let chosen_verse of new_data) {
+            let new_chosen_verses: any[] = []
+            let invalid_items: InvalidItemType[] = []
+            for(let [index, chosen_verse] of new_data.entries()) {
                 try {
                     let new_chosen_verse = await ChosenVerseModel.create(chosen_verse);
                     new_chosen_verses.push(new_chosen_verse)
-                } catch(e) {
+                } catch(e: any) {
+                    let msg: string = "Error inserting chosen_verse, try again later"
+                    invalid_items.push({item_index: index, message: msg})
                     continue
                 }
             }
 
-            return c.json({created_items: new_chosen_verses, success_count: new_chosen_verses.length, failed_count: new_data.length - new_chosen_verses.length}, HttpStatusCode.CREATED)
+            return c.json({created_items: new_chosen_verses, success_count: new_chosen_verses.length, invalid_items}, HttpStatusCode.CREATED)
         } catch(e) {
             logger.error({error:e}, "Error in POST /chosen_verses/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
