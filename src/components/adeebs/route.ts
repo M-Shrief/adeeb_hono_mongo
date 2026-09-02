@@ -10,7 +10,7 @@ import { get_one_res, create_many_req, create_many_res, create_one_req, create_o
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
@@ -197,25 +197,30 @@ adeeb_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many Adeebs"),
     async (c) => {
         try {
+            let new_data: any[] = await c.req.json()
             let new_adeebs: any[] = []
-            let new_data: any[]  = await c.req.json()
-            for(let adeeb of new_data) {
+            let invalid_items: InvalidItemType[] = []
+            for(let [index, adeeb] of new_data.entries()) {
                 try {
                     let new_adeeb = await AdeebModel.create(adeeb);
                     new_adeebs.push(new_adeeb)
-                } catch(e) {
+                } catch(e: any) {
+                    let msg: string = ""
+                    if (e.code === 11000) { // Handle Duplicate Key Error
+                        // const field = Object.keys(e.keyPattern)[0];
+                        // const value = e.keyValue[field];
+                        // const index = e.index
+                        // console.error(`Duplicate value for ${field}: ${value}`);
+                        msg =  "Adeeb already exists"
+                    } else {
+                        msg =  "Error inserting adeeb, try again later"
+                    }
+                    invalid_items.push({item_index: index, message: msg})
                     continue
-                    // if (e.code === 11000) { // Handle Duplicate Key Error
-                    //     const field = Object.keys(e.keyPattern)[0];
-                    //     const value = e.keyValue[field];
-                    //     const index = e.index
-                    //     console.error(`Duplicate value for ${field}: ${value}`);
-
-                    //     return c.json({ message: "Adeeb already exists"}, HttpStatusCode.CONFLICT) 
-                    // }
                 }
             }
-            return c.json({created_items: new_adeebs, success_count: new_adeebs.length, failed_count: new_data.length - new_adeebs.length}, HttpStatusCode.CREATED)
+
+            return c.json({created_items: new_adeebs, success_count: new_adeebs.length, invalid_items}, HttpStatusCode.CREATED)
         } catch(e: any) {
             logger.error({error:e}, "Error in POST /adeebs/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)

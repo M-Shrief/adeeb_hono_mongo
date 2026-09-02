@@ -16,6 +16,7 @@ import { name_schema, time_period_schema, bio_schema} from "../../schemas/adeeb.
 import { minimal_schema as poems_schema } from "../../schemas/poem.js"
 import { minimal_schema as chosen_verses_schema } from "../../schemas/chosen_verse.js"
 import { minimal_schema as prose_qoutes_schema } from "../../schemas/prose_qoute.js"
+import { create_many_schema } from '../../schemas/api.js';
 
 
 export const get_one_res = object({
@@ -47,11 +48,7 @@ export const create_one_res = object({
 });
 
 export const create_many_req = array(create_one_req)
-export const create_many_res = object({
-  created_items: array(create_one_res),
-  success_count: number(),
-  failed_count: number(),
-})
+export const create_many_res = create_many_schema(create_one_res)
 
 export const update_req = object({
   name: optional(name_schema),
