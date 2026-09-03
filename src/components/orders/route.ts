@@ -302,7 +302,10 @@ orders_route.post(
             return c.json({...new_order._doc, prints: new_prints}, HttpStatusCode.CREATED)
 
 
-        } catch(e) {
+        } catch(e: any) {
+            if (e.name === "ValidationError") {
+                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+            }
             logger.error({error:e}, "Error in POST /orders")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -360,7 +363,11 @@ orders_route.post(
                         user: order.user
                     }
                     new_order = await OrderModel.create({...order_data as any })                    
-                } catch(e) {
+                } catch(e: any) {
+                    if (e.name === "ValidationError") {
+                        invalid_items.push({item_index: index, message: e.message})
+                        continue
+                    }
                     let msg: string = "Error inserting Order, try again later"
                     invalid_items.push({item_index: index, message: msg})
                     continue
@@ -447,8 +454,11 @@ orders_route.post(
 
             return c.json(new_print, HttpStatusCode.CREATED)
 
-        } catch(e) {
-            logger.error({error:e}, "Error in POST /orders/:order_id/prints")
+        } catch(e: any) {
+            if (e.name === "ValidationError") {
+                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+            }
+           logger.error({error:e}, "Error in POST /orders/:order_id/prints")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
     }
