@@ -4,6 +4,7 @@
 */
 import { Schema } from "mongoose"
 import { randomUUID } from "node:crypto"
+import { AdeebModel, ChosenVerseModel, OrderModel, PoemModel, ProseQouteModel, UserModel } from "./schemas.js"
 
  
 
@@ -67,13 +68,83 @@ export const timestamps_schema = {
 }
 
 // Refs
-export const adeeb_ref = { type: Schema.Types.UUID, ref: 'Adeeb', required: true };
-export const poem_ref = { type: Schema.Types.UUID, ref: 'Poem', required: true };
-export const poem_ref_optional = { type: Schema.Types.UUID, ref: 'Poem', default: undefined };
-export const chosen_verse_ref_optional = { type: Schema.Types.UUID, ref: 'ChosenVerse', default: undefined };
-export const prose_qoute_ref_optional = { type: Schema.Types.UUID, ref: 'ProseQoute', default: undefined };
+export const adeeb_ref = { 
+    type: Schema.Types.UUID,
+    ref: 'Adeeb',
+    required: true,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await AdeebModel.findById(value) !== null;
+        },
+        message: 'Referenced Adeeb does not exist'
+    }
+};
+export const poem_ref = { 
+    type: Schema.Types.UUID,
+    ref: 'Poem',
+    required: true,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await PoemModel.findById(value) !== null;
+        },
+        message: 'Referenced Poem does not exist'
+    }
+};
+export const poem_ref_optional = { 
+    type: Schema.Types.UUID, 
+    ref: 'Poem', 
+    default: undefined,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await PoemModel.findById(value) !== null;
+        },
+        message: 'Referenced Poem does not exist'
+    }
+};
+export const chosen_verse_ref_optional = { 
+    type: Schema.Types.UUID, 
+    ref: 'ChosenVerse', 
+    default: undefined,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await ChosenVerseModel.findById(value) !== null;
+        },
+        message: 'Referenced ChosenVerse does not exist'
+    }
+ };
+export const prose_qoute_ref_optional = { 
+    type: Schema.Types.UUID, 
+    ref: 'ProseQoute', 
+    default: undefined,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await ProseQouteModel.findById(value) !== null;
+        },
+        message: 'Referenced ProseQoute does not exist'
+    }
+};
 
-export const user_ref_optional = { type: Schema.Types.UUID, ref: 'User', default: undefined };
-export const order_ref = { type: Schema.Types.UUID, ref: 'Order', required: true };
+export const user_ref_optional = { 
+    type: Schema.Types.UUID, 
+    ref: 'User', 
+    default: undefined,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await UserModel.findById(value) !== null;
+        },
+        message: 'Referenced User does not exist'
+    }
+};
+export const order_ref = { 
+    type: Schema.Types.UUID,
+    ref: 'Order', 
+    required: true,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await OrderModel.findById(value) !== null;
+        },
+        message: 'Referenced Adeeb does not exist'
+    }
+};
 
 
