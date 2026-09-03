@@ -137,6 +137,9 @@ prose_qoute_route.post(
             if (e.code === 11000) { // Handle Duplicate Key Error
                 return c.json({ message: "ProseQoute already exists"}, HttpStatusCode.CONFLICT) 
             }
+            if (e.name === "ValidationError") {
+                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+            }
             logger.error({error:e}, "Error in POST /prose_qoutes")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -168,6 +171,10 @@ prose_qoute_route.post(
                     let new_prose_qoute = await ProseQouteModel.create(prose_qoute);
                     new_prose_qoutes.push(new_prose_qoute)
                 } catch(e: any) {
+                    if (e.name === "ValidationError") {
+                        invalid_items.push({item_index: index, message: e.message})
+                        continue
+                    }
                     let msg: string = "Error inserting prose_qoute, try again later"
                     invalid_items.push({item_index: index, message: msg})
                     continue
