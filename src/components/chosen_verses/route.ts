@@ -142,8 +142,8 @@ chosen_verses_route.post(
             }
             return c.json(new_chosen_verse, HttpStatusCode.CREATED)
         } catch(e: any) {
-            if (e.code === 11000) { // Handle Duplicate Key Error
-                return c.json({ message: "ChosenVerse already exists"}, HttpStatusCode.CONFLICT) 
+            if (e.name === "ValidationError") {
+                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
             }
             logger.error({error:e}, "Error in POST /chosen_verses")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
@@ -175,8 +175,11 @@ chosen_verses_route.post(
                     let new_chosen_verse = await ChosenVerseModel.create(chosen_verse);
                     new_chosen_verses.push(new_chosen_verse)
                 } catch(e: any) {
-                    let msg: string = "Error inserting chosen_verse, try again later"
-                    invalid_items.push({item_index: index, message: msg})
+                    if (e.name === "ValidationError") {
+                        invalid_items.push({item_index: index, message: e.message})
+                        continue
+                    }
+                    invalid_items.push({item_index: index, message: "Error inserting chosen_verse, try again later"})
                     continue
                 }
             }
