@@ -23,7 +23,7 @@ export const create_print_req = object({
   qoute: optional(qoute_schema),
 
   poem: optional(uuid_schema),
-  chosen_verses: optional(uuid_schema),
+  chosen_verse: optional(uuid_schema),
   prose_qoute: optional(uuid_schema),
 })
 
@@ -41,7 +41,7 @@ export const create_print_res = object({
   qoute: optional(qoute_schema),
 
   poem: optional(uuid_schema),
-  chosen_verses: optional(uuid_schema),
+  chosen_verse: optional(uuid_schema),
   prose_qoute: optional(uuid_schema),
 })
 
@@ -59,7 +59,7 @@ export const update_print_req = object({
   qoute: optional(qoute_schema),
 
   poem: optional(uuid_schema),
-  chosen_verses: optional(uuid_schema),
+  chosen_verse: optional(uuid_schema),
   prose_qoute: optional(uuid_schema),
 })
 
