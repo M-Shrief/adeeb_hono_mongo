@@ -169,6 +169,9 @@ poem_route.post(
             if (e.code === 11000) { // Handle Duplicate Key Error
                 return c.json({ message: "Poem already exists"}, HttpStatusCode.CONFLICT) 
             }
+            if (e.name === "ValidationError") {
+                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+            }
             logger.error({error:e}, "Error in POST /poems")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -203,6 +206,8 @@ poem_route.post(
                     let msg: string = ""
                     if (e.code === 11000) { // Handle Duplicate Key Error
                         msg =  "Poem already exists"
+                    } else if (e.name === "ValidationError") {
+                        msg = e.message
                     } else {
                         msg =  "Error inserting poem, try again later"
                     }
