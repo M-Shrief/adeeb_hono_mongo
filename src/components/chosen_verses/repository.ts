@@ -144,9 +144,6 @@ const delete_one = async(id: string) => {
 
         return null
     } catch(e: any) {
-        if ((e.cause as any).code === "23503") {
-            throw new APIError(HttpStatusCode.CONFLICT, "repository")
-        }
         logger.error({error: e}, "Error Delete /chosen_verses/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }
