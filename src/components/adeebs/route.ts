@@ -2,23 +2,19 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import {Error as MError, Types, QueryFilter} from "mongoose"
 /////
-import { AdeebModel } from "../../database/schemas.js"
 import {one_schema} from "../../schemas/adeeb.js"
 import { get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
-import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
+import { APIError } from '../../utils/errors.js';
+import { service } from './service.js';
 
 export const adeeb_route = new Hono()  
-
-const cache_prefix = "adeebs" 
-
 
 adeeb_route.get(
     "/adeebs",
@@ -31,40 +27,20 @@ adeeb_route.get(
         },
     }),
     query_validator(queries_schema_for_get_all_req),
-    async(c) => {
+        async(c) => {
         try {
-            let limit = Number(c.req.query('limit')) || 100
-            let offset = Number(c.req.query('offset')) || 0
-
-            const result = await AdeebModel.aggregate([
-                {
-                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
-                },
-                {
-                    $facet: {
-                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
-                        count: [ { $count: 'total_count' } ]          // Get count
-                    }
-                }
-            ]);
-
-            const adeebs = result[0].data;
-            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
-            
-            return c.json(
-                {
-                    data: adeebs,
-                    limit, 
-                    offset, 
-                    total_count: total_count
-                },
-                HttpStatusCode.OK
-            )
+            let limit = Number(c.req.query('limit'))
+            let offset = Number(c.req.query('offset'))
+            let resonse_body = await service.get_all(limit, offset) 
+            return c.json(resonse_body, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+            }
+            // if the error originated from the route/controller then log it:
             logger.error({error:e}, "Error in GET /adeebs")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
-
     }
 )
 
@@ -83,68 +59,17 @@ adeeb_route.get(
     async(c) => {
         try {
             let id = c.req.param("id")
-
-            let cache_key = format_key_by_id(cache_prefix, id)
-            let cache_res = await cache_get(cache_key)
-
-            if(cache_res) {
-                return c.json(cache_res, HttpStatusCode.OK)
-            }
-
-            const result = await AdeebModel.aggregate([
-                {
-                    $match: { _id: new Types.UUID(id) },
-                },
-                {
-                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
-                },
-                {
-                    $lookup: {
-                    from: 'poems',
-                    localField: '_id',
-                    foreignField: 'adeeb',
-                    as: 'poems',
-                    pipeline: [
-                        {
-                            $unset: ['adeeb', 'verses', 'is_couplet', 'reviewed', 'created_at', 'updated_at', '__v'],
-                        },
-                    ],
-                    },
-                },
-                {
-                    $lookup: {
-                    from: 'proseqoutes',
-                    localField: '_id',
-                    foreignField: 'adeeb',
-                    as: 'prose_qoutes',
-                    pipeline: [
-                        {
-                            $unset: ['adeeb', 'tags', 'reviewed', 'created_at', 'updated_at', '__v'],
-                        },
-                    ],
-                    },
-                },
-                {
-                    $lookup: {
-                    from: 'chosenverses',
-                    localField: '_id',
-                    foreignField: 'adeeb',
-                    as: 'chosen_verses',
-                    pipeline: [
-                        {
-                            $unset: ['adeeb', 'poem', 'tags', 'reviewed', 'created_at', 'updated_at', '__v'],
-                        },
-                    ],
-                    },
-                },
-            ]);
-            if (result.length == 0) {
-                return c.json({message: "Adeeb's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-            await cache_set(cache_key, result[0])
-            return c.json(result[0], HttpStatusCode.OK)
-
+            let adeeb = await service.get_one_by_id(id)
+            return c.json(adeeb, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.NOT_FOUND:
+                        return c.json({message: "Adeeb's not Found"}, HttpStatusCode.NOT_FOUND)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in GET /adeebs/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -169,11 +94,16 @@ adeeb_route.post(
     async(c) => {
         try {
             let new_data = await c.req.json()
-            let new_adeeb = await AdeebModel.create({name: new_data.name, bio: new_data.bio, time_period: new_data.time_period, reviewed: new_data.reviewed})
+            let new_adeeb = await service.create_one(new_data)
             return c.json(new_adeeb, HttpStatusCode.CREATED)
-        } catch(e: any) {
-            if (e.code === 11000) { // Handle Duplicate Key Error
-                return c.json({ message: "Adeeb already exists"}, HttpStatusCode.CONFLICT) 
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: e.message}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
             }
             logger.error({error:e}, "Error in POST /adeebs")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
@@ -195,33 +125,20 @@ adeeb_route.post(
     auth_header_validator(),
     verify_adminstrator(),
     json_validator(create_many_req, "Invalid data, can't be used to create many Adeebs"),
-    async (c) => {
+        async(c) => {
         try {
-            let new_data: any[] = await c.req.json()
-            let new_adeebs: any[] = []
-            let invalid_items: InvalidItemType[] = []
-            for(let [index, adeeb] of new_data.entries()) {
-                try {
-                    let new_adeeb = await AdeebModel.create(adeeb);
-                    new_adeebs.push(new_adeeb)
-                } catch(e: any) {
-                    let msg: string = ""
-                    if (e.code === 11000) { // Handle Duplicate Key Error
-                        // const field = Object.keys(e.keyPattern)[0];
-                        // const value = e.keyValue[field];
-                        // const index = e.index
-                        // console.error(`Duplicate value for ${field}: ${value}`);
-                        msg =  "Adeeb already exists"
-                    } else {
-                        msg =  "Error inserting adeeb, try again later"
-                    }
-                    invalid_items.push({item_index: index, message: msg})
-                    continue
+            let new_data = await c.req.json()
+            let response_body = await service.create_many(new_data)
+            return c.json(response_body, HttpStatusCode.CREATED)
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.BAD_REQUEST:
+                        return c.json({message: e.message}, HttpStatusCode.BAD_REQUEST)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
             }
-
-            return c.json({created_items: new_adeebs, success_count: new_adeebs.length, invalid_items}, HttpStatusCode.CREATED)
-        } catch(e: any) {
             logger.error({error:e}, "Error in POST /adeebs/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -248,17 +165,17 @@ adeeb_route.put(
             let id = c.req.param("id")
             let data = await c.req.json()
             
-            // We use QueryFilter because it'll refuse filtering by _id
-            // without making another interface.
-            // Note we could've just used {_id: id} as any, but we type helpers instead
-            let filter_q: QueryFilter<typeof AdeebModel> = { _id: new Types.UUID(id) }
-            await AdeebModel.updateOne( filter_q, { $set: { ...data} })
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
+            await service.update_one(id, data)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
-        } catch(e) {
+        } catch(e: any) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "Already Exists"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error in PUT /adeebs/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
@@ -273,6 +190,7 @@ adeeb_route.delete(
         ...describe_jwt_security,
         responses: {
            ...get_described_route(HttpStatusCode.NO_CONTENT, "Deleted Successfully"),
+           ...get_described_route(HttpStatusCode.CONFLICT, "Adeeb's is refrenced in other tables", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request, try again later.", base_response_schema),
         },
     }),
@@ -282,16 +200,17 @@ adeeb_route.delete(
     async (c) => {
         try {
             let id = c.req.param("id")
-            
-            let filter_q: QueryFilter<typeof AdeebModel> = { _id: new Types.UUID(id) }
-            await AdeebModel.deleteOne( filter_q)
-
-            // Delete from cache after delete to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
+            await service.delete_one(id)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "Adeeb is refrenced in other tables"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error Delete /adeebs/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
