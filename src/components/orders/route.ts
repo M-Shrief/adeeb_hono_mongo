@@ -343,12 +343,10 @@ orders_route.post(
 
 
             let data: any[] = await c.req.json()
-            let new_adeebs: any[] = []
+            let new_orders: any[] = []
             let invalid_items: InvalidItemType[] = []
             let delivery_schedule = new Date()
             delivery_schedule.setDate(delivery_schedule.getDate() + 7);
-
-            let new_orders: any[] = []
             for (let [index, order] of data.entries()) {
                 let new_order: any
                 try{
@@ -384,7 +382,7 @@ orders_route.post(
                 {
                     created_items: new_orders,
                     success_count: new_orders.length,
-                    failed_count: data.length - new_orders.length
+                    invalid_items: invalid_items
                 },
                 HttpStatusCode.CREATED
             )
@@ -403,7 +401,7 @@ orders_route.post(
         summary: "Add Print",
         ...describe_jwt_security,
         responses: {
-           ...get_described_route(HttpStatusCode.CREATED, "Successful added Prints", create_print_res),
+           ...get_described_route(HttpStatusCode.CREATED, "Successful added Print", create_print_res),
            ...get_described_route(HttpStatusCode.UNAUTHORIZED, "Not Authorized", base_response_schema),
            ...get_described_route(HttpStatusCode.UNPROCESSABLE_ENTITY, "Invalid data for Print", base_response_schema),
            ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
@@ -431,8 +429,6 @@ orders_route.post(
                 return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
             }
 
-            let user: any = payload["user"]
-            let user_id: string = user["id"]
             let permissions = payload["permissions"] as string[]
             let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
             if (!is_adminstrator) {
@@ -449,7 +445,7 @@ orders_route.post(
 
 
             let data = await c.req.json()
-            let print_data = {...data, user: user_id, order: order_id}
+            let print_data = {...data, user: existing_order.user_id, order: order_id}
             let new_print = await PrintModel.create({...print_data})
 
             return c.json(new_print, HttpStatusCode.CREATED)
