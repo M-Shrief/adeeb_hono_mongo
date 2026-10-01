@@ -2,22 +2,18 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { QueryFilter, Types } from 'mongoose';
 /////
-import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
-import { PoemModel } from "../../database/schemas.js"
 import {one_schema} from "../../schemas/poem.js"
 import { get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
+import { service } from './service.js';
+import { APIError } from '../../utils/errors.js';
 
 export const poem_route = new Hono()  
-
-const cache_prefix = "poems" 
-
 
 poem_route.get(
     "/poems",
@@ -32,34 +28,14 @@ poem_route.get(
     query_validator(queries_schema_for_get_all_req),
     async(c) => {
         try {
-            let limit = Number(c.req.query('limit')) || 100
-            let offset = Number(c.req.query('offset')) || 0
-
-            const result = await PoemModel.aggregate([
-                {
-                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
-                },
-                {
-                    $facet: {
-                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
-                        count: [ { $count: 'total_count' } ]          // Get count
-                    }
-                }
-            ]);
-
-            const poems = result[0].data;
-            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
-
-            return c.json(
-                {
-                    data: poems,
-                    limit, 
-                    offset, 
-                    total_count: total_count
-                },
-                HttpStatusCode.OK
-            )
+            let limit = Number(c.req.query('limit'))
+            let offset = Number(c.req.query('offset'))
+            let resonse_body = await service.get_all(limit, offset) 
+            return c.json(resonse_body, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+            }
             logger.error({error:e}, "Error in GET /poems")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -81,63 +57,17 @@ poem_route.get(
     async(c) => {
         try {
             let id = c.req.param("id")
-
-            let cache_key = format_key_by_id(cache_prefix, id)
-            let cache_res = await cache_get(cache_key)
-
-            if(cache_res) {
-                return c.json(cache_res, HttpStatusCode.OK)
-            }
-
-            let result = await PoemModel.aggregate([
-                {
-                    $match: { _id: new Types.UUID(id) },
-                },
-                {
-                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
-                },
-                {
-                        $lookup: {
-                        from: 'adeebs', // Name of the collection to join (usually lowercase plural)
-                        localField: 'adeeb', // The ObjectId field in your schema
-                        foreignField: '_id', // The _id field in the target collection
-                        as: 'adeeb', // The new array field containing the joined document
-                        pipeline: [
-                            {
-                                $project: {
-                                    _id: 1,
-                                    name: 1
-                                },
-                            },
-                        ],
-                    }
-                },
-                {
-                    $unwind: '$adeeb' // Unwind to get a single object instead of an array
-                },
-                {
-                    $lookup: {
-                        from: 'chosenverses',
-                        localField: '_id',
-                        foreignField: 'poem',
-                        as: 'chosen_verses',
-                        pipeline: [
-                            {
-                                $unset: ['adeeb', 'poem', 'tags', 'reviewed', 'created_at', 'updated_at', '__v'],
-                            },
-                        ],
-                    },
-                }
-            ])
-            if (result.length == 0) {
-                return c.json({message: "Poem's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-            
-            let poem = result[0]
-            await cache_set(cache_key, poem)
-
-            return c.json(poem[0], HttpStatusCode.OK)
+            let poem = await service.get_one_by_id(id)
+            return c.json(poem, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.NOT_FOUND:
+                        return c.json({message: "Poem's not Found"}, HttpStatusCode.NOT_FOUND)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in GET /poems/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -162,15 +92,18 @@ poem_route.post(
     async(c) => {
         try {
             let new_data = await c.req.json()
-            let new_poem = await PoemModel.create({...new_data})
-            
+            let new_poem = await service.create_one(new_data)
             return c.json(new_poem, HttpStatusCode.CREATED)
-        } catch(e: any) {
-            if (e.code === 11000) { // Handle Duplicate Key Error
-                return c.json({ message: "Poem already exists"}, HttpStatusCode.CONFLICT) 
-            }
-            if (e.name === "ValidationError") {
-                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: e.message}, HttpStatusCode.CONFLICT)
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message: e.message}, HttpStatusCode.UNPROCESSABLE_ENTITY)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
             }
             logger.error({error:e}, "Error in POST /poems")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
@@ -194,30 +127,18 @@ poem_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many Poems"),
     async(c) => {
         try {
-
             let new_data: any[] = await c.req.json()
-            let new_poems: any[] = []
-            let invalid_items: InvalidItemType[] = []
-            for(let [index, poem] of new_data.entries()) {
-                try {
-                    let new_poem = await PoemModel.create(poem);
-                    new_poems.push(new_poem)
-                } catch(e: any) {
-                    let msg: string = ""
-                    if (e.code === 11000) { // Handle Duplicate Key Error
-                        msg =  "Poem already exists"
-                    } else if (e.name === "ValidationError") {
-                        msg = e.message
-                    } else {
-                        msg =  "Error inserting poem, try again later"
-                    }
-                    invalid_items.push({item_index: index, message: msg})
-                    continue
+            let response_body = await service.create_many(new_data)
+            return c.json(response_body, HttpStatusCode.CREATED)
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.BAD_REQUEST:
+                        return c.json({message: e.message}, HttpStatusCode.BAD_REQUEST)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
             }
-
-            return c.json({created_items: new_poems, success_count: new_poems.length, invalid_items}, HttpStatusCode.CREATED)
-        } catch(e: any) {
             logger.error({error:e}, "Error in POST /poems/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -242,16 +163,18 @@ poem_route.put(
     async(c) => {
         try {
             let id = c.req.param("id")
-            let data = await c.req.json()
-            
-            let filter_q: QueryFilter<typeof PoemModel> = { _id: new Types.UUID(id) }
-            await PoemModel.updateOne( filter_q, { $set: { ...data} })
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
+            let data = await c.req.json()            
+            await service.update_one(id, data)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
-        } catch(e) {
+        } catch(e: any) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "Already Exists"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error in PUT /poems/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
@@ -274,17 +197,18 @@ poem_route.delete(
     id_param_validator(),
     async(c) => {
         try {
-            let id = c.req.param("id")
-            
-            let filter_q: QueryFilter<typeof PoemModel> = { _id: new Types.UUID(id) }
-            await PoemModel.deleteOne( filter_q)
-
-            // Delete from cache after delete to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
+            let id = c.req.param("id")            
+            await service.delete_one(id)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "Poem is refrenced in other tables"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error in DELETE /poems/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
