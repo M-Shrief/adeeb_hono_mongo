@@ -2,23 +2,19 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { QueryFilter, Types } from 'mongoose';
 /////
-import { ChosenVerseModel } from '../../database/schemas.js';
 import {one_schema} from "../../schemas/chosen_verse.js"
 import { get_one_res, create_many_req, create_many_res, create_one_req, create_one_res, update_req } from './schema.js'
-import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 ///// Utils
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
-import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
+import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
+import { service } from './service.js';
+import { APIError } from '../../utils/errors.js';
 
 export const chosen_verses_route = new Hono()  
-
-const cache_prefix = "chosen_verses" 
-
 
 chosen_verses_route.get(
     "/chosen_verses",
@@ -35,33 +31,13 @@ chosen_verses_route.get(
         try {
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
-
-            const result = await ChosenVerseModel.aggregate([
-                {
-                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
-                },
-                {
-                    $facet: {
-                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
-                        count: [ { $count: 'total_count' } ]          // Get count
-                    }
-                }
-            ]);
-
-            
-            const chosen_verses = result[0].data;
-            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
-
-            return c.json(
-                {
-                    data: chosen_verses,
-                    limit, 
-                    offset, 
-                    total_count: total_count
-                },
-                HttpStatusCode.OK
-            )
+            let resonse_body = await service.get_all(limit, offset) 
+            return c.json(resonse_body, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+            }
+            // if the error originated from the route/controller then log it:
             logger.error({error:e}, "Error in GET /chosen_verses")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -84,34 +60,18 @@ chosen_verses_route.get(
     async(c) => {
         try {
             let id = c.req.param("id")
-
-            let cache_key = format_key_by_id(cache_prefix, id)
-            let cache_res = await cache_get(cache_key)
-
-            if(cache_res) {
-                return c.json(cache_res, HttpStatusCode.OK)
-            }
-
-            let chosen_verse = await ChosenVerseModel.findById(id, {
-                tags: 1,
-                verses: 1,
-                is_couplet: 1,
-                reviewed: 1,
-                //
-                adeeb: 1,
-                poem: 1,
-                })
-                .populate('adeeb', ['_id', 'name'])
-                .populate('poem', ['_id', 'intro']);
-            if (!chosen_verse) {
-                return c.json({message: "ChosenVerse's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-
-            await cache_set(cache_key, chosen_verse)
-
+            let chosen_verse = await service.get_one_by_id(id)
             return c.json(chosen_verse, HttpStatusCode.OK)
 
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.NOT_FOUND:
+                        return c.json({message: "ChosenVerse's not Found"}, HttpStatusCode.NOT_FOUND)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in GET /chosen_verses/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -136,14 +96,16 @@ chosen_verses_route.post(
     async(c) => {
         try {
             let new_data = await c.req.json()
-            let new_chosen_verse = await ChosenVerseModel.create({...new_data})
-            if (!new_chosen_verse) {
-                return c.json({ message: "ChosenVerse already exists"}, HttpStatusCode.NOT_ACCEPTABLE) 
-            }
+            let new_chosen_verse = await service.create_one(new_data)
             return c.json(new_chosen_verse, HttpStatusCode.CREATED)
-        } catch(e: any) {
-            if (e.name === "ValidationError") {
-                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message: e.message}, HttpStatusCode.UNPROCESSABLE_ENTITY)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
             }
             logger.error({error:e}, "Error in POST /chosen_verses")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
@@ -168,24 +130,17 @@ chosen_verses_route.post(
     async (c) => {
         try {
             let new_data: any[] = await c.req.json()
-            let new_chosen_verses: any[] = []
-            let invalid_items: InvalidItemType[] = []
-            for(let [index, chosen_verse] of new_data.entries()) {
-                try {
-                    let new_chosen_verse = await ChosenVerseModel.create(chosen_verse);
-                    new_chosen_verses.push(new_chosen_verse)
-                } catch(e: any) {
-                    if (e.name === "ValidationError") {
-                        invalid_items.push({item_index: index, message: e.message})
-                        continue
-                    }
-                    invalid_items.push({item_index: index, message: "Error inserting chosen_verse, try again later"})
-                    continue
+            let response_body = await service.create_many(new_data)
+            return c.json(response_body, HttpStatusCode.CREATED)
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.BAD_REQUEST:
+                        return c.json({message: e.message}, HttpStatusCode.BAD_REQUEST)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
             }
-
-            return c.json({created_items: new_chosen_verses, success_count: new_chosen_verses.length, invalid_items}, HttpStatusCode.CREATED)
-        } catch(e) {
             logger.error({error:e}, "Error in POST /chosen_verses/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -212,16 +167,17 @@ chosen_verses_route.put(
             let id = c.req.param("id")
             let data = await c.req.json()
             
-            let filter_q: QueryFilter<typeof ChosenVerseModel> = { _id: new Types.UUID(id) }
-            await ChosenVerseModel.updateOne( filter_q, { $set: { ...data} })
-
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
-
+            await service.update_one(id, data)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
-        } catch(e) {
+        } catch(e: any) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "Foriegn key error"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error in PUT /chosen_verses/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
@@ -246,15 +202,17 @@ chosen_verses_route.delete(
         try {
             let id = c.req.param("id")
             
-            let filter_q: QueryFilter<typeof ChosenVerseModel> = { _id: new Types.UUID(id) }
-            await ChosenVerseModel.deleteOne( filter_q)
-
-            // Delete from cache after delete to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
+            await service.delete_one(id)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "ChosenVerse is refrenced in other tables"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error in DELETE /chosen_verses/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
