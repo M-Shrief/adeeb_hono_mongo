@@ -7,7 +7,7 @@ import { QueryFilter, Types } from 'mongoose';
 import { OrderStatusEnum, RoleEnum, OrderModel, PrintModel } from "../../database/schemas.js"
 import { one_schema as order_schema } from "../../schemas/order.js";
 import { one_schema as print_schema} from "../../schemas/print.js";
-import { create_order_req, create_order_res, create_many_orders_req, create_many_orders_res, create_print_res, create_print_req, update_order_req, update_print_req} from './schema.js'
+import { create_order_req, create_order_res, create_many_orders_req, create_many_orders_res, create_print_res, create_print_req, update_order_req, update_print_req, create_many_prints_res, create_many_prints_req} from './schema.js'
 import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, param_validator, query_validator } from '../../utils/validators.js'
@@ -455,6 +455,92 @@ orders_route.post(
                 return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
             }
            logger.error({error:e}, "Error in POST /orders/:order_id/prints")
+            return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+        }
+    }
+)
+
+orders_route.post(
+    "/orders/:order_id/prints/many",
+    describeRoute({
+        tags: ["Orders"],
+        summary: "Add Many Print",
+        ...describe_jwt_security,
+        responses: {
+           ...get_described_route(HttpStatusCode.CREATED, "Successful added Prints", create_many_prints_res),
+           ...get_described_route(HttpStatusCode.UNAUTHORIZED, "Not Authorized", base_response_schema),
+           ...get_described_route(HttpStatusCode.BAD_REQUEST, "Bad Request", base_response_schema),
+        },
+    }),
+    auth_header_validator(),
+    param_validator(object({ order_id: uuid_schema }), "Invalid Order's id"),
+    json_validator(create_many_prints_req, "Invalid data for Print"),
+    async(c) => {
+        try {
+            let auth_header = c.req.header("Authorization")
+            let payload = await verify_token(auth_header!) // header was already validated
+            if (!payload) {
+                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
+            }
+
+            let order_id = c.req.param("order_id")
+
+            const existing_order = await OrderModel.findById(order_id, {
+                _id: 1,
+                user: 1,
+                is_updateable: 1
+            })
+            if (!existing_order) {
+                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
+            }
+
+            let permissions = payload["permissions"] as string[]
+            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
+            if (!is_adminstrator) {
+                let order_user = existing_order.get("user") 
+                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+                if (check_ownership(val, payload) == false) {
+                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
+                }
+                // if it's owner, we need to check if he can update it or not
+                if (!existing_order.get("is_updateable")) { 
+                    return c.json({ message: "Not Authorized to update order's data"}, HttpStatusCode.UNAUTHORIZED) 
+                }
+            }
+
+
+            let data = await c.req.json()
+            let new_prints: any[] = []
+            let invalid_items: InvalidItemType[] = []
+            for (let [index, print] of data.entries()) {
+                let new_print: any
+                try{
+                    let print_data = {...print, user: existing_order.user_id, order: order_id}
+                    new_print = await PrintModel.create({...print_data})
+                } catch(e: any) {
+                    if (e.name === "ValidationError") {
+                        invalid_items.push({item_index: index, message: e.message})
+                        continue
+                    }
+                    let msg: string = "Error inserting Order, try again later"
+                    invalid_items.push({item_index: index, message: msg})
+                    continue
+                }
+
+                new_prints.push(new_print)
+            }
+
+            return c.json(
+                {
+                    created_items: new_prints,
+                    success_count: new_prints.length,
+                    invalid_items: invalid_items
+                }, 
+                HttpStatusCode.CREATED
+            )
+
+        } catch(e: any) {
+            logger.error({error:e}, "Error in POST /orders/:order_id/prints/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
     }

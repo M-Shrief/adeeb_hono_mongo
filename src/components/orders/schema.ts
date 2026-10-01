@@ -45,6 +45,9 @@ export const create_print_res = object({
   prose_qoute: optional(uuid_schema),
 })
 
+export const create_many_prints_req = array(create_print_req)
+export const create_many_prints_res = create_many_schema(create_print_res)
+
 export const update_print_req = object({
   order: optional(uuid_schema),
   user: optional(uuid_schema),
