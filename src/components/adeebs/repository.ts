@@ -121,6 +121,9 @@ const create_one = async(new_data: any) => {
         if (e.code === 11000) { // Handle Duplicate Key Error
             throw new APIError(HttpStatusCode.CONFLICT, "repository", "Adeeb already exists")
         }
+        if (e.name === "ValidationError") {
+            throw new APIError(HttpStatusCode.UNPROCESSABLE_ENTITY, "repository", e.message)
+        }
         logger.error({error:e}, "Error in POST /adeebs")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }

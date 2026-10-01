@@ -101,6 +101,8 @@ adeeb_route.post(
                 switch(e.status_code) {
                     case HttpStatusCode.CONFLICT:
                         return c.json({message: e.message}, HttpStatusCode.CONFLICT)
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message: e.message}, HttpStatusCode.UNPROCESSABLE_ENTITY)
                     default:
                         return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
