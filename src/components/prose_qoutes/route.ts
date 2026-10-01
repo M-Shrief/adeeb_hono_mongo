@@ -13,10 +13,11 @@ import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, I
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
 import { verify_adminstrator } from '../../utils/auth.js';
+import { APIError } from '../../utils/errors.js';
+import { service } from './service.js';
 
 export const prose_qoute_route = new Hono()  
 
-const cache_prefix = "prose_qoutes" 
 
 prose_qoute_route.get(
     "/prose_qoutes",
@@ -33,32 +34,12 @@ prose_qoute_route.get(
         try {
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
-
-            const result = await ProseQouteModel.aggregate([
-                {
-                    $unset: ['reviewed', 'created_at', 'updated_at', '__v'],
-                },
-                {
-                    $facet: {
-                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
-                        count: [ { $count: 'total_count' } ]          // Get count
-                    }
-                }
-            ]);
-
-            const prose_qoutes = result[0].data;
-            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
-            
-            return c.json(
-                {
-                    data: prose_qoutes,
-                    limit, 
-                    offset, 
-                    total_count: total_count
-                },
-                HttpStatusCode.OK
-            )
+            let resonse_body = await service.get_all(limit, offset) 
+            return c.json(resonse_body, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+            }
             logger.error({error:e}, "Error in GET /prose_qoutes")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -82,31 +63,17 @@ prose_qoute_route.get(
         try {
             let id = c.req.param("id")
 
-            let cache_key = format_key_by_id(cache_prefix, id)
-            let cache_res = await cache_get(cache_key)
-
-            if(cache_res) {
-                return c.json(cache_res, HttpStatusCode.OK)
-            }
-
-            let prose_qoute = await ProseQouteModel.findById(id, {
-                tags: 1,
-                qoute: 1,
-                source: 1,
-                reviewed: 1,
-                //
-                adeeb: 1,
-                }).populate('adeeb', ['_id', 'name']);
-
-            if (!prose_qoute) {
-                return c.json({message: "ProseQoute's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-
-            await cache_set(cache_key, prose_qoute)
-
+            let prose_qoute = await service.get_one_by_id(id)
             return c.json(prose_qoute, HttpStatusCode.OK)
-
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.NOT_FOUND:
+                        return c.json({message: "ProseQoute's not Found"}, HttpStatusCode.NOT_FOUND)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in GET /prose_qoutes/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -131,14 +98,16 @@ prose_qoute_route.post(
     async(c) => {
         try {
             let new_data = await c.req.json()
-            let new_prose_qoute = await ProseQouteModel.create({...new_data})
+            let new_prose_qoute = await service.create_one(new_data)
             return c.json(new_prose_qoute, HttpStatusCode.CREATED)
-        } catch(e: any) {
-            if (e.code === 11000) { // Handle Duplicate Key Error
-                return c.json({ message: "ProseQoute already exists"}, HttpStatusCode.CONFLICT) 
-            }
-            if (e.name === "ValidationError") {
-                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: e.message}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
             }
             logger.error({error:e}, "Error in POST /prose_qoutes")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
@@ -162,28 +131,18 @@ prose_qoute_route.post(
     json_validator(create_many_req, "Invalid data, can't be used to create many ProseQoutes"),
     async (c) => {
         try {
-
             let new_data: any[] = await c.req.json()
-            let new_prose_qoutes: any[] = []
-            let invalid_items: InvalidItemType[] = []
-            for(let [index, prose_qoute] of new_data.entries()) {
-                try {
-                    let new_prose_qoute = await ProseQouteModel.create(prose_qoute);
-                    new_prose_qoutes.push(new_prose_qoute)
-                } catch(e: any) {
-                    if (e.name === "ValidationError") {
-                        invalid_items.push({item_index: index, message: e.message})
-                        continue
-                    }
-                    let msg: string = "Error inserting prose_qoute, try again later"
-                    invalid_items.push({item_index: index, message: msg})
-                    continue
+            let response_body = await service.create_many(new_data)
+            return c.json(response_body, HttpStatusCode.CREATED)
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.BAD_REQUEST:
+                        return c.json({message: e.message}, HttpStatusCode.BAD_REQUEST)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
             }
-
-            return c.json({created_items: new_prose_qoutes, success_count: new_prose_qoutes.length, invalid_items}, HttpStatusCode.CREATED)
-
-        } catch(e) {
             logger.error({error:e}, "Error in POST /prose_qoutes/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -210,15 +169,17 @@ prose_qoute_route.put(
             let id = c.req.param("id")
             let data = await c.req.json()
             
-            let filter_q: QueryFilter<typeof ProseQouteModel> = { _id: new Types.UUID(id) }
-            await ProseQouteModel.updateOne( filter_q, { $set: { ...data} })
-
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
+            await service.update_one(id, data)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
-        } catch(e) {
+        } catch(e: any) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "Foriegn key error"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error in PUT /prose_qoutes/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
@@ -243,15 +204,17 @@ prose_qoute_route.delete(
         try {
             let id = c.req.param("id")
             
-            let filter_q: QueryFilter<typeof ProseQouteModel> = { _id: new Types.UUID(id) }
-            await ProseQouteModel.deleteOne( filter_q)
-
-            // Delete from cache after delete to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
+            await service.delete_one(id)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.CONFLICT:
+                        return c.json({message: "ProseQoute is refrenced in other tables"}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error: e}, "Error in DELETE /prose_qoutes/:id")
             return c.json({message: "Bad Request, try again later."}, HttpStatusCode.BAD_REQUEST)
         }
