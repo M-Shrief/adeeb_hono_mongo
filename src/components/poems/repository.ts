@@ -166,8 +166,11 @@ const update_one = async(id: string, data: any) => {
 
         return null
     } catch(e: any) {
-        if ((e.cause as any).code === "23505") {
+        if (e.code === 11000) {
             throw new APIError(HttpStatusCode.CONFLICT, "repository")
+        }
+        if (e.name === "ValidationError") {
+            throw new APIError(HttpStatusCode.UNPROCESSABLE_ENTITY, "repository", e.message)
         }
         logger.error({error: e}, "Error in PUT /poems/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
@@ -185,9 +188,6 @@ const delete_one = async(id: string) => {
 
         return null
     } catch(e: any) {
-        if ((e.cause as any).code === "23503") {
-            throw new APIError(HttpStatusCode.CONFLICT, "repository")
-        }
         logger.error({error: e}, "Error Delete /poems/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }
