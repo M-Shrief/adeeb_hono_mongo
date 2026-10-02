@@ -174,6 +174,8 @@ adeeb_route.put(
                 switch(e.status_code) {
                     case HttpStatusCode.CONFLICT:
                         return c.json({message: "Already Exists"}, HttpStatusCode.CONFLICT)
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message:e.message}, HttpStatusCode.UNPROCESSABLE_ENTITY)
                     default:
                         return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
@@ -207,8 +209,6 @@ adeeb_route.delete(
         } catch(e) {
             if(e instanceof APIError) {
                 switch(e.status_code) {
-                    case HttpStatusCode.CONFLICT:
-                        return c.json({message: "Adeeb is refrenced in other tables"}, HttpStatusCode.CONFLICT)
                     default:
                         return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }

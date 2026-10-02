@@ -171,9 +171,12 @@ const update_one = async(id: string, data: any) => {
         await cache_del(cache_key)
         return null
     } catch(e: any) {
-        // if ((e.cause as any).code === "23505") {
-        //     throw new APIError(HttpStatusCode.CONFLICT, "repository")
-        // }
+        if (e.code === 11000) {
+            throw new APIError(HttpStatusCode.CONFLICT, "repository")
+        }
+        if (e.name === "ValidationError") {
+            throw new APIError(HttpStatusCode.UNPROCESSABLE_ENTITY, "repository", e.message)
+        }
         logger.error({error: e}, "Error in PUT /adeebs/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }
@@ -189,9 +192,6 @@ const delete_one = async(id: string) => {
         await cache_del(cache_key)
         return null
     } catch(e: any) {
-        // if ((e.cause as any).code === "23503") {
-        //     throw new APIError(HttpStatusCode.CONFLICT, "repository")
-        // }
         logger.error({error: e}, "Error Delete /adeebs/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }
