@@ -2,7 +2,9 @@ import {
   optional,
   array,
   object,
-  number
+  pipe,
+  number,
+  minLength
 } from 'valibot';
 /////////////
 import { uuid_schema, verses_schema, is_couplet_schema, qoute_schema, reviewed_schema, created_at, updated_at } from '../../schemas/general.js';
@@ -74,7 +76,7 @@ export const create_order_req = object({
   name: name_schema,
   phone: phone_schema,
   address: address_schema,
-  prints: array(create_print_req)
+  prints: pipe(array(create_print_req), minLength(1))
 })
 
 export const create_order_res = object({
@@ -87,7 +89,7 @@ export const create_order_res = object({
   is_updateable: is_updateable,
   status: status_schema,
   reviewed: reviewed_schema,
-  prints: array(create_print_res)
+  prints: pipe(array(create_print_res), minLength(1))
 })
 
 export const create_many_orders_req = array(create_order_req)
@@ -102,5 +104,4 @@ export const update_order_req = object({
   is_updateable: optional(is_updateable),
   status: optional(status_schema),
   reviewed: optional(reviewed_schema),
-  prints: optional(array(create_print_req))
 })
