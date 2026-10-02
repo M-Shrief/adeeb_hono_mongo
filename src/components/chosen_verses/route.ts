@@ -172,8 +172,8 @@ chosen_verses_route.put(
         } catch(e: any) {
             if(e instanceof APIError) {
                 switch(e.status_code) {
-                    case HttpStatusCode.CONFLICT:
-                        return c.json({message: "Foriegn key error"}, HttpStatusCode.CONFLICT)
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message:e.message}, HttpStatusCode.UNPROCESSABLE_ENTITY)
                     default:
                         return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
@@ -207,8 +207,6 @@ chosen_verses_route.delete(
         } catch(e) {
             if(e instanceof APIError) {
                 switch(e.status_code) {
-                    case HttpStatusCode.CONFLICT:
-                        return c.json({message: "ChosenVerse is refrenced in other tables"}, HttpStatusCode.CONFLICT)
                     default:
                         return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }

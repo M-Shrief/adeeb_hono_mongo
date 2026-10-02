@@ -128,6 +128,9 @@ const update_one = async(id: string, data: any) => {
 
         return null
     } catch(e: any) {
+        if (e.name === "ValidationError") {
+            throw new APIError(HttpStatusCode.UNPROCESSABLE_ENTITY, "repository", e.message)
+        }
         logger.error({error: e}, "Error in PUT /chosen_verses/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }
