@@ -146,6 +146,12 @@ const update_user_by_id = async(id: string, data: any) => {
 
         return null
     } catch(e: any) {
+        if (e.code === 11000) {
+            throw new APIError(HttpStatusCode.CONFLICT, "repository")
+        }
+        if (e.name === "ValidationError") {
+            throw new APIError(HttpStatusCode.UNPROCESSABLE_ENTITY, "repository", e.message)
+        }
         logger.error({error: e}, "Error in PUT /users/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }
@@ -170,6 +176,7 @@ const delete_one = async(id: string) => {
         await UserModel.deleteOne( filter_q)
         return null
     } catch(e: any) {
+        logger.error({error: e}, "Error in DELETE /users/:id")
         throw new APIError(HttpStatusCode.BAD_REQUEST, "repository")
     }
 }    
