@@ -2,20 +2,18 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { QueryFilter, Types } from 'mongoose';
 /////
-import { OrderStatusEnum, RoleEnum, OrderModel, PrintModel } from "../../database/schemas.js"
 import { one_schema as order_schema } from "../../schemas/order.js";
 import { one_schema as print_schema} from "../../schemas/print.js";
 import { create_order_req, create_order_res, create_many_orders_req, create_many_orders_res, create_print_res, create_print_req, update_order_req, update_print_req, create_many_prints_res, create_many_prints_req} from './schema.js'
-import { cache_del, cache_get, cache_set, format_key_by_id } from "../../cache/utils.js"
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, param_validator, query_validator } from '../../utils/validators.js'
 import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
-import { verify_token, create_permission, OP, check_permission, check_if_adminstrator, check_ownership} from "../../utils/auth.js"
 import { object } from 'valibot';
 import { uuid_schema } from '../../schemas/general.js';
+import { service } from './service.js';
+import { APIError } from '../../utils/errors.js';
 
 
 export const orders_route = new Hono() 
@@ -38,63 +36,20 @@ orders_route.get(
     auth_header_validator(),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-        
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
-            let permissions = payload["permissions"] as string[]
-
-            let is_authorized = check_if_adminstrator(permissions, OP.READ)
-            if (!is_authorized) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-            
+            let auth_header = c.req.header("Authorization") as string        
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
-
-
-            const result = await OrderModel.aggregate([
-                {
-                    $unset: ['created_at', 'updated_at', '__v'],
-                },
-                {
-                    $lookup: {
-                    from: 'prints',
-                    localField: '_id',
-                    foreignField: 'order',
-                    as: 'prints',
-                    pipeline: [
-                        {
-                            $unset: ["order", "user", "__v"],
-                        },
-                    ],
-                    },
-                },
-                {
-                    $facet: {
-                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
-                        count: [ { $count: 'total_count' } ]          // Get count
-                    }
-                }
-            ]);
-
-            const orders = result[0].data;
-            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
-
-            return c.json(
-                {
-                    data: orders,
-                    limit, 
-                    offset, 
-                    total_count: total_count
-                },
-                HttpStatusCode.OK
-            )        
-
+            let resonse_body = await service.get_all(auth_header, limit, offset) 
+            return c.json(resonse_body, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in GET /orders/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -117,70 +72,20 @@ orders_route.get(
     auth_header_validator(),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
-            let permissions = payload["permissions"] as string[]
-            let authorized_list = [
-                create_permission(RoleEnum.NORMAL, OP.READ)
-            ]
-            
-            let is_authorized = check_permission(authorized_list, permissions, OP.READ)
-            if (!is_authorized) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
-            let user: any = payload["user"]
-            let user_id: string = user["id"]
-            
+            let auth_header = c.req.header("Authorization") as string
             let limit = Number(c.req.query('limit')) || 100
             let offset = Number(c.req.query('offset')) || 0
-
-            const result = await OrderModel.aggregate([
-                {
-                    $match: { user: new Types.UUID(user_id) },
-                },
-                {
-                    $unset: ['created_at', 'updated_at', '__v'],
-                },
-                {
-                    $lookup: {
-                    from: 'prints',
-                    localField: '_id',
-                    foreignField: 'order',
-                    as: 'prints',
-                    pipeline: [
-                        {
-                            $unset: ["order", "user", "__v"],
-                        },
-                    ],
-                    },
-                },
-                {
-                    $facet: {
-                        data: [ { $skip: offset }, { $limit: limit } ], // Get documents
-                        count: [ { $count: 'total_count' } ]          // Get count
-                    }
-                }
-            ]);
-            const orders = result[0].data;
-            const total_count = result[0].count[0] ? result[0].count[0].total_count : 0; 
-
-            return c.json(
-                {
-                    data: orders,
-                    limit, 
-                    offset, 
-                    total_count: total_count
-                },
-                HttpStatusCode.OK
-            )        
-
+            let resonse_body = await service.get_user_orders(auth_header, limit, offset) 
+            return c.json(resonse_body, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in GET /orders/me")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -204,62 +109,21 @@ orders_route.get(
     auth_header_validator(),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-        
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }            
-
+            let auth_header = c.req.header("Authorization") as string // header was already validated
             let id = c.req.param("id")
-            let cache_key = format_key_by_id(cache_prefix, id)
-            let cache_res = await cache_get(cache_key)
-            let order: any
-        
-            if(cache_res) {
-                order = cache_res
-            } else {
-                const result = await OrderModel.aggregate([
-                    {
-                        $match: { _id: new Types.UUID(id) },
-                    },
-                    {
-                        $unset: ['created_at', 'updated_at', '__v'],
-                    },
-                    {
-                        $lookup: {
-                        from: 'prints',
-                        localField: '_id',
-                        foreignField: 'order',
-                        as: 'prints',
-                        pipeline: [
-                            {
-                                $unset: ["order", "user", "__v"],
-                            },
-                        ],
-                        },
-                    },
-                ]);
-
-                order = result.length != 0 ? result[0] : null
-            }
-
-            if (!order) {
-                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-
-            await cache_set(cache_key, order)
-
-            let permissions = payload["permissions"] as string[]
-            let is_authorized = check_if_adminstrator(permissions, OP.READ)
-            if (!is_authorized) {
-                if (check_ownership(order.user, payload) == false) {
-                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-            }            
-    
-            return c.json(order,HttpStatusCode.OK)        
+            let existing_user = await service.get_one_by_id(id, auth_header)
+            return c.json(existing_user, HttpStatusCode.OK)
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    case HttpStatusCode.NOT_FOUND:
+                        return c.json({message: "Order is not Found"}, HttpStatusCode.NOT_FOUND)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in GET /orders/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -281,30 +145,16 @@ orders_route.post(
     async(c) => {
         try {
             let data = await c.req.json()
-            let delivery_schedule = new Date()
-            delivery_schedule.setDate(delivery_schedule.getDate() + 7);
-            let order_data = { 
-                name: data.name,
-                phone: data.phone,
-                address: data.address,
-                reviewed: false,
-                is_updateable: true,
-                delivery_schedule: delivery_schedule,
-                status: OrderStatusEnum.IN_PROGRESS,
-                user: data.user
-            }
-            let new_order = await OrderModel.create({...order_data as any })
-
-            let prints_data = data.prints.map((item: any) => { return {...item, user: new_order.get("user"), order: new_order.get("_id")}})
-            let new_prints = await PrintModel.create([...prints_data])
-
-            // We specifiy new_order._doc field to get the created records values, without it's metadata
-            return c.json({...new_order._doc, prints: new_prints}, HttpStatusCode.CREATED)
-
-
+            let response_body = await service.create_order(data)
+            return c.json(response_body, HttpStatusCode.CREATED)
         } catch(e: any) {
-            if (e.name === "ValidationError") {
-                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message: e.message}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
             }
             logger.error({error:e}, "Error in POST /orders")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
@@ -329,65 +179,19 @@ orders_route.post(
     json_validator(create_many_orders_req, "Invalid data for Order"),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
-            let permissions = payload["permissions"] as string[]
-            let is_authorized = check_if_adminstrator(permissions, OP.WRITE)
-            if (!is_authorized) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
-
+            let auth_header = c.req.header("Authorization") as string
             let data: any[] = await c.req.json()
-            let new_orders: any[] = []
-            let invalid_items: InvalidItemType[] = []
-            let delivery_schedule = new Date()
-            delivery_schedule.setDate(delivery_schedule.getDate() + 7);
-            for (let [index, order] of data.entries()) {
-                let new_order: any
-                try{
-                    let order_data = { 
-                        name: order.name,
-                        phone: order.phone,
-                        address: order.address,
-                        reviewed: false,
-                        is_updateable: true,
-                        delivery_schedule: delivery_schedule,
-                        status: OrderStatusEnum.IN_PROGRESS,
-                        user: order.user
-                    }
-                    new_order = await OrderModel.create({...order_data as any })                    
-                } catch(e: any) {
-                    if (e.name === "ValidationError") {
-                        invalid_items.push({item_index: index, message: e.message})
-                        continue
-                    }
-                    let msg: string = "Error inserting Order, try again later"
-                    invalid_items.push({item_index: index, message: msg})
-                    continue
+            let response_body = await service.create_orders(auth_header, data)
+            return c.json(response_body, HttpStatusCode.CREATED)
+        } catch(e: any) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
-                let prints_data = order.prints.map((item: any) => { return {...item, user: new_order.get("user"), order: new_order.get("_id")}})
-                let new_prints = await PrintModel.create([...prints_data])
-
-                // We specifiy new_order._doc field to get the created records values, without it's metadata
-                new_orders.push({...new_order._doc, prints: new_prints})
             }
-
-
-            return c.json(
-                {
-                    created_items: new_orders,
-                    success_count: new_orders.length,
-                    invalid_items: invalid_items
-                },
-                HttpStatusCode.CREATED
-            )
-
-        } catch(e) {
             logger.error({error:e}, "Error in POST /orders/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -412,49 +216,23 @@ orders_route.post(
     json_validator(create_print_req, "Invalid data for Print"),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
+            let auth_header = c.req.header("Authorization") as string
             let order_id = c.req.param("order_id")
-
-            const existing_order = await OrderModel.findById(order_id, {
-                _id: 1,
-                user: 1,
-                is_updateable: 1
-            })
-            if (!existing_order) {
-                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-
-            let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
-            if (!is_adminstrator) {
-                let order_user = existing_order.get("user") 
-                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-                if (check_ownership(val, payload) == false) {
-                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-                // if it's owner, we need to check if he can update it or not
-                if (!existing_order.get("is_updateable")) { 
-                    return c.json({ message: "Not Authorized to update order's data"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-            }
-
-
             let data = await c.req.json()
-            let print_data = {...data, user: existing_order.user, order: order_id}
-            let new_print = await PrintModel.create({...print_data})
-
-            return c.json(new_print, HttpStatusCode.CREATED)
-
+            let response_body = await service.create_print(order_id, auth_header, data)
+            return c.json(response_body, HttpStatusCode.CREATED)
         } catch(e: any) {
-            if (e.name === "ValidationError") {
-                return c.json({ message: e.message}, HttpStatusCode.BAD_REQUEST) 
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message: e.message}, HttpStatusCode.CONFLICT)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
             }
-           logger.error({error:e}, "Error in POST /orders/:order_id/prints")
+            logger.error({error:e}, "Error in POST /orders/:order_id/prints")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
     }
@@ -477,69 +255,20 @@ orders_route.post(
     json_validator(create_many_prints_req, "Invalid data for Print"),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
+            let auth_header = c.req.header("Authorization") as string
             let order_id = c.req.param("order_id")
-
-            const existing_order = await OrderModel.findById(order_id, {
-                _id: 1,
-                user: 1,
-                is_updateable: 1
-            })
-            if (!existing_order) {
-                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-
-            let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
-            if (!is_adminstrator) {
-                let order_user = existing_order.get("user") 
-                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-                if (check_ownership(val, payload) == false) {
-                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-                // if it's owner, we need to check if he can update it or not
-                if (!existing_order.get("is_updateable")) { 
-                    return c.json({ message: "Not Authorized to update order's data"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-            }
-
-
             let data = await c.req.json()
-            let new_prints: any[] = []
-            let invalid_items: InvalidItemType[] = []
-            for (let [index, print] of data.entries()) {
-                let new_print: any
-                try{
-                    let print_data = {...print, user: existing_order.user, order: order_id}
-                    new_print = await PrintModel.create({...print_data})
-                } catch(e: any) {
-                    if (e.name === "ValidationError") {
-                        invalid_items.push({item_index: index, message: e.message})
-                        continue
-                    }
-                    let msg: string = "Error inserting Order, try again later"
-                    invalid_items.push({item_index: index, message: msg})
-                    continue
-                }
-
-                new_prints.push(new_print)
-            }
-
-            return c.json(
-                {
-                    created_items: new_prints,
-                    success_count: new_prints.length,
-                    invalid_items: invalid_items
-                }, 
-                HttpStatusCode.CREATED
-            )
-
+            let response_body = await service.create_prints(order_id, auth_header, data)
+            return c.json(response_body, HttpStatusCode.CREATED)
         } catch(e: any) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in POST /orders/:order_id/prints/many")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -564,65 +293,22 @@ orders_route.put(
     json_validator(update_order_req, "Invalid data for Order"),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
+            let auth_header = c.req.header("Authorization") as string
             let id = c.req.param("id")
-            const existing_order = await OrderModel.findById(id, {
-                _id: 1,
-                user: 1,
-                is_updateable: 1
-            })
-            if (!existing_order) {
-                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
             let data = await c.req.json()
-
-            let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
-            if (!is_adminstrator) {
-                let order_user = existing_order.get("user") 
-                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-                if (check_ownership(val, payload) == false) {
-                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-                // if it's owner, we need to check if he can update it or not
-                if (!existing_order.get("is_updateable")) {
-                    return c.json({ message: "Not Authorized to update order's data"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-                // if it's updated by the owner, then remove admin's related fields -- aka assign them to undefine.
-                data.is_updateable = undefined
-                data.status = undefined
-                data.reviewed = undefined
-                data.user = undefined
-            }
-
-            // Ensuring data integrity
-
-            // If the order is aborted or marked as completed, then we make sure that is_updateable is False
-            if (data.status == OrderStatusEnum.COMPLETED || data.status == OrderStatusEnum.ABORTED) {
-                data.is_updateable = false
-            } else if (data.status == OrderStatusEnum.IN_PROGRESS) {
-                data.is_updateable = true
-            } else if (data.is_updateable) { 
-            // if it want to make is_updateable true, then we make sure status == "in progress".
-                data.status = OrderStatusEnum.IN_PROGRESS
-            }
-
-            let filter_q: QueryFilter<typeof OrderModel> = { _id: new Types.UUID(id) }
-            await OrderModel.updateOne( filter_q, { $set: { ...data} })
-
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
- 
-
+            await service.update_order(id, auth_header, data)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
-
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message:e.message}, HttpStatusCode.UNPROCESSABLE_ENTITY)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in PUT /orders/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -648,50 +334,23 @@ orders_route.put(
     json_validator(update_print_req, "Invalid data for Print"),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
-            let order_id = c.req.param("order_id")
-            const existing_order = await OrderModel.findById(order_id, {
-                _id: 1,
-                user: 1,
-                is_updateable: 1
-            })
-
-            if (!existing_order) {
-                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
+            let auth_header = c.req.header("Authorization") as string
             let data = await c.req.json()
-
-            let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
-            if (!is_adminstrator) {
-                let order_user = existing_order.get("user") 
-                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-                if (check_ownership(val, payload) == false) {
-                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-                // if it's owner, we need to check if he can update it or not
-                if (!existing_order.get("is_updateable")) {
-                    return c.json({ message: "Not Authorized to update print's data"}, HttpStatusCode.UNAUTHORIZED) 
+            let order_id = c.req.param("order_id")
+            let print_id = c.req.param("print_id")
+            await service.update_print(order_id, print_id, auth_header, data)
+            return c.newResponse(null, HttpStatusCode.NO_CONTENT)
+        } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    case HttpStatusCode.UNPROCESSABLE_ENTITY:
+                        return c.json({message:e.message}, HttpStatusCode.UNPROCESSABLE_ENTITY)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
                 }
             }
-
-
-            let print_id = c.req.param("print_id")
-            
-            await PrintModel.updateOne( {_id: new Types.UUID(print_id)}, { $set: { ...data} })
-
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, order_id)
-            await cache_del(cache_key)
-
-            return c.newResponse(null, HttpStatusCode.NO_CONTENT)
-
-        } catch(e) {
             logger.error({error:e}, "Error in PUT /orders/:order_id/prints/:print_id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -715,51 +374,20 @@ orders_route.delete(
     id_param_validator(),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
-            let order_id = c.req.param("id")
-            const existing_order = await OrderModel.findById(order_id, {
-                _id: 1,
-                user: 1,
-                is_updateable: 1
-            })
-
-            if (!existing_order) {
-                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-
-
-            let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
-            if (!is_adminstrator) {
-                let order_user = existing_order.get("user") 
-                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-                if (check_ownership(val, payload) == false) {
-                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-                // if it's owner, we need to check if he can delete it or not
-                if (!existing_order.get("is_updateable")) {
-                    return c.json({ message: "Not Authorized to delete print"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-            }
-
+            let auth_header = c.req.header("Authorization") as string
             let id = c.req.param("id")
-            await PrintModel.deleteMany({ order: new Types.UUID(id) })
-            let filter_q: QueryFilter<typeof OrderModel> = { _id: new Types.UUID(id) }
-            await OrderModel.deleteOne( filter_q)
-
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, id)
-            await cache_del(cache_key)
-
-
+            await service.delete_order(id, auth_header)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
 
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in Delete /orders/:id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
@@ -783,48 +411,20 @@ orders_route.delete(
     param_validator(object({ print_id: uuid_schema }), "Invalid Print's id"),
     async(c) => {
         try {
-            let auth_header = c.req.header("Authorization")
-            let payload = await verify_token(auth_header!) // header was already validated
-            if (!payload) {
-                return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-            }
-
+            let auth_header = c.req.header("Authorization") as string
             let order_id = c.req.param("order_id")
-            const existing_order = await OrderModel.findById(order_id, {
-                _id: 1,
-                user: 1,
-                is_updateable: 1
-            })
-
-            if (!existing_order) {
-                return c.json({message: "Order's not Found"}, HttpStatusCode.NOT_FOUND)
-            }
-
-            let permissions = payload["permissions"] as string[]
-            let is_adminstrator = check_if_adminstrator(permissions, OP.WRITE)
-            if (!is_adminstrator) {
-                let order_user = existing_order.get("user") 
-                let val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-                if (check_ownership(val, payload) == false) {
-                    return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-                // if it's owner, we need to check if he can delete it or not
-                if (!existing_order.get("is_updateable")) {
-                    return c.json({ message: "Not Authorized to delete print"}, HttpStatusCode.UNAUTHORIZED) 
-                }
-            }
-
-
             let print_id = c.req.param("print_id")
-            await PrintModel.deleteOne({ _id: new Types.UUID(print_id) })
-
-            // Delete from cache after update to prevent showing old data
-            let cache_key = format_key_by_id(cache_prefix, order_id)
-            await cache_del(cache_key)
-
+            await service.delete_print(order_id, print_id, auth_header)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)
-
         } catch(e) {
+            if(e instanceof APIError) {
+                switch(e.status_code) {
+                    case HttpStatusCode.UNAUTHORIZED:
+                        return c.json({message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED)
+                    default:
+                        return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
+                }
+            }
             logger.error({error:e}, "Error in DELETE /orders/:order_id/prints/:print_id")
             return c.json({message: "Unknown error, try again later"}, HttpStatusCode.BAD_REQUEST)
         }
