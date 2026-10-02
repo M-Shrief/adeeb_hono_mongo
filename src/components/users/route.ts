@@ -2,16 +2,13 @@ import { Hono } from 'hono';
 import {
   describeRoute,
 } from "hono-openapi";
-import { QueryFilter, Types } from 'mongoose';
 /////
-import { RoleEnum, UserModel } from "../../database/schemas.js"
 import { one_schema } from "../../schemas/user.js"
 import { signup_req, login_req, user_authorized_res, update_current_req, update_one_req } from './schema.js'
 import { logger } from '../../utils/logger.js';
 import { auth_header_validator, id_param_validator, json_validator, query_validator } from '../../utils/validators.js'
 import { base_response_schema, queries_schema_for_get_all_req, get_all_schema} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
-import { check_if_adminstrator, compare_password, hash_password, sign_token, verify_token, create_permission, OP, check_permission, RoleEnumType } from "../../utils/auth.js"
 import { service } from './service.js';
 import { APIError } from '../../utils/errors.js';
 export const users_route = new Hono() 
