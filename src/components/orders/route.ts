@@ -253,7 +253,7 @@ orders_route.get(
             let permissions = payload["permissions"] as string[]
             let is_authorized = check_if_adminstrator(permissions, OP.READ)
             if (!is_authorized) {
-                if (check_ownership(order.user_id, payload) == false) {
+                if (check_ownership(order.user, payload) == false) {
                     return c.json({ message: "Not Authorized"}, HttpStatusCode.UNAUTHORIZED) 
                 }
             }            
@@ -445,7 +445,7 @@ orders_route.post(
 
 
             let data = await c.req.json()
-            let print_data = {...data, user: existing_order.user_id, order: order_id}
+            let print_data = {...data, user: existing_order.user, order: order_id}
             let new_print = await PrintModel.create({...print_data})
 
             return c.json(new_print, HttpStatusCode.CREATED)
@@ -515,7 +515,7 @@ orders_route.post(
             for (let [index, print] of data.entries()) {
                 let new_print: any
                 try{
-                    let print_data = {...print, user: existing_order.user_id, order: order_id}
+                    let print_data = {...print, user: existing_order.user, order: order_id}
                     new_print = await PrintModel.create({...print_data})
                 } catch(e: any) {
                     if (e.name === "ValidationError") {
@@ -597,7 +597,7 @@ orders_route.put(
                 data.is_updateable = undefined
                 data.status = undefined
                 data.reviewed = undefined
-                data.user_id = undefined
+                data.user = undefined
             }
 
             // Ensuring data integrity
