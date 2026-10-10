@@ -3,12 +3,13 @@ import { RoleEnum } from "../../database/schemas.js"
 import { HttpStatusCode } from "../../utils/api.js"
 import { check_if_adminstrator, verify_token, OP, create_permission, check_permission, sign_token, compare_password } from "../../utils/auth.js"
 import { APIError } from "../../utils/errors.js"
+import * as auth_utils from '../../utils/auth.js'
 import { logger } from "../../utils/logger.js"
 import { repository } from "./repository.js"
 
 const get_all = async(auth_header: string, limit: number, offset: number) => {
     try {
-        let payload = await verify_token(auth_header!) // header was already validated
+        let payload = await verify_token(auth_header) // header was already validated
         if (!payload) {
             throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
         }
@@ -31,7 +32,7 @@ const get_all = async(auth_header: string, limit: number, offset: number) => {
     }    
 } 
 
-const get_one_by_id = async(id: string | null, auth_header: string) => {
+const get_current_one = async(auth_header: string) => {
     try {
         let payload = await verify_token(auth_header) 
         if (!payload) {
@@ -48,9 +49,32 @@ const get_one_by_id = async(id: string | null, auth_header: string) => {
             throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
         }
 
-        if (!id) {
-            let user = payload["user"] as any
-            id = user.id as string
+        let user = payload["user"] as any
+        let id = user.id as string
+
+        let repo_result = await repository.get_one_by_id(id)
+        return repo_result
+    } catch(e) {
+        if(e instanceof APIError) {
+            throw e
+        } else {
+            logger.error({error:e}, "Error in GET /users/me")
+            throw new APIError(HttpStatusCode.BAD_REQUEST, "service")
+        }
+    }
+} 
+
+const get_one_by_id = async(id: string, auth_header: string) => {
+    try {
+        let payload = await verify_token(auth_header) 
+        if (!payload) {
+            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        }
+
+        let permissions = payload["permissions"] as string[]
+        let is_authorized = auth_utils.check_if_adminstrator(permissions, OP.READ)
+        if (!is_authorized) {
+            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
         }
     
         let repo_result = await repository.get_one_by_id(id)
@@ -215,6 +239,7 @@ const delete_one = async(id: string | null, auth_header: string) => {
 
 export const service = {
     get_all,
+    get_current_one,
     get_one_by_id,
     signup,
     login,
