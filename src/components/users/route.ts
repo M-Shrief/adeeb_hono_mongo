@@ -67,7 +67,7 @@ users_route.get(
     async(c) => {
         try {
             let auth_header = c.req.header("Authorization") as string // header was already validated
-            let existing_user = await service.get_one_by_id(null,auth_header)
+            let existing_user = await service.get_current_one(auth_header)
             return c.json(existing_user, HttpStatusCode.OK)
         } catch(e) {
             if(e instanceof APIError) {
@@ -330,7 +330,7 @@ users_route.delete(
     async(c) => {
         try {
             let auth_header = c.req.header("Authorization") as string
-            await service.delete_one(null, auth_header)
+            await service.delete_current_user(auth_header)
             return c.newResponse(null, HttpStatusCode.NO_CONTENT)            
         } catch(e) {
             if(e instanceof APIError) {

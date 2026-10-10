@@ -205,7 +205,7 @@ const ban_user_by_id = async(id: string, auth_header: string) => {
     }
 }
 
-const delete_one = async(id: string | null, auth_header: string) => {
+const delete_current_user = async(auth_header: string) => {
     try {
         let payload = await verify_token(auth_header)
         if (!payload) {
@@ -222,10 +222,9 @@ const delete_one = async(id: string | null, auth_header: string) => {
             throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
         }
     
-        if(!id) {
-            let user = payload["user"] as any
-            id = user.id as string
-        }
+        
+        let user = payload["user"] as any
+        let id = user.id as string
         let repo_result = await repository.delete_one(id)
         return repo_result
     } catch(e) {
@@ -237,6 +236,32 @@ const delete_one = async(id: string | null, auth_header: string) => {
     }
 }
 
+
+const delete_one = async(id: string, auth_header: string) => {
+    try {
+        let payload = await verify_token(auth_header)
+        if (!payload) {
+            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        }
+
+        let permissions = payload["permissions"] as string[]
+        let is_authorized = check_if_adminstrator(permissions, OP.WRITE)
+        if (!is_authorized) {
+            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        }
+    
+        let repo_result = await repository.delete_one(id)
+        return repo_result
+    } catch(e) {
+        if(e instanceof APIError) {
+            throw e
+        } else {
+            throw new APIError(HttpStatusCode.BAD_REQUEST, "service")
+        }
+    }
+}
+
+
 export const service = {
     get_all,
     get_current_one,
@@ -246,5 +271,6 @@ export const service = {
     update_current_user,
     update_user_by_id,
     ban_user_by_id,
+    delete_current_user,
     delete_one,
 }
