@@ -11,7 +11,7 @@ import * as time_utils from "../../../utils/time.js"
 import {ACCESS_EXP_MIN_DELTA, REFRESH_EXP_MIN_DELTA} from "../../../auth/jwt.js"
 import { APIError } from '../../../utils/errors.js'
 import { HttpStatusCode } from '../../../utils/api.js';
-import { JWTType } from './scheme.js';
+import { JWTType } from './schemas.js';
 
 const cache_prefix = "jwts" 
 
