@@ -7,7 +7,7 @@ import { HttpStatusCode, get_described_route, describe_jwt_security } from '../.
 import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../../schemas/api.js';
 import { set_refresh_token_cookie } from '../../../auth/utils.js';
 import { auth_header_validator, id_param_validator, json_validator, query_validator, cookie_validator, param_validator } from '../../../utils/validators.js'
-import { refresh_response_schema, refresh_cookie_schema, update_one_req } from './scheme.js';
+import { refresh_response_schema, refresh_cookie_schema, update_one_req } from './schemas.js';
 import {service} from "./service.js"
 import { logger } from '../../../utils/logger.js';
 import { one_schema } from '../../../schemas/jwt.js';
