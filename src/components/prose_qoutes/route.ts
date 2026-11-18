@@ -12,7 +12,7 @@ import { auth_header_validator, id_param_validator, json_validator, query_valida
 import { base_response_schema, queries_schema_for_get_all_req, get_all_schema, InvalidItemType} from '../../schemas/api.js';
 import { HttpStatusCode, get_described_route, describe_jwt_security } from '../../utils/api.js';
 import { logger } from '../../utils/logger.js';
-import { verify_adminstrator } from '../../utils/auth.js';
+import { verify_admin_middleware } from '../../auth/utils.js';
 import { APIError } from '../../utils/errors.js';
 import { service } from './service.js';
 
@@ -93,7 +93,7 @@ prose_qoute_route.post(
         },
     }),
     auth_header_validator(),
-    verify_adminstrator(),
+    verify_admin_middleware(),
     json_validator(create_one_req, "Invalid data for ProseQoute"),
     async(c) => {
         try {
@@ -127,7 +127,7 @@ prose_qoute_route.post(
         },
     }),
     auth_header_validator(),
-    verify_adminstrator(),
+    verify_admin_middleware(),
     json_validator(create_many_req, "Invalid data, can't be used to create many ProseQoutes"),
     async (c) => {
         try {
@@ -161,7 +161,7 @@ prose_qoute_route.put(
         },
     }),
     auth_header_validator(),
-    verify_adminstrator(),
+    verify_admin_middleware(),
     id_param_validator(),
     json_validator(update_req, "Invalid data for update"),
     async(c) => {
@@ -198,7 +198,7 @@ prose_qoute_route.delete(
         },
     }),
     auth_header_validator(),
-    verify_adminstrator(),
+    verify_admin_middleware(),
     id_param_validator(),
     async (c) => {
         try {
