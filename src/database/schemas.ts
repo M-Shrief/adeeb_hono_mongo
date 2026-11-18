@@ -1,6 +1,6 @@
 import { Schema } from "mongoose";
-// 
-import {conn} from './index.js'
+//
+import {conn} from './index.js';
 import { 
     is_couplet_schema, 
     adeeb_ref, 
@@ -11,6 +11,7 @@ import {
     timestamps_schema, 
     uuid_schema, 
     verses_schema,
+    user_ref,
     user_ref_optional,
     order_ref,
     poem_ref_optional,
@@ -140,6 +141,8 @@ export const RoleEnum = {
   BANNED: "Banned"
 } as const
 
+export type RoleEnumType = typeof RoleEnum[keyof typeof RoleEnum];
+
 export const user_schema = new Schema(
     {
         _id: uuid_schema,
@@ -175,6 +178,50 @@ export const user_schema = new Schema(
 )
 
 export const UserModel = conn.model("User", user_schema)
+
+export const TokenTypeEnum = {
+    ACCESS: "access",
+    REFRESH: "refresh"
+} as const
+export type TokenType = typeof TokenTypeEnum[keyof typeof TokenTypeEnum];
+
+export const jwt_schema = new Schema(
+    {
+        _id: uuid_schema,
+        family_id: { type: Schema.Types.UUID, required: true },
+        token_type: {
+            type: String,
+            maxLength: 12,
+            enum: {
+                values: Object.values(TokenTypeEnum),
+                // To assign error message:
+                // message: '{VALUE} is not a valid Token type'
+            },
+            required: true,
+        },
+        is_banned: {
+            type: Boolean,
+            default: false
+        }, 
+        used: {
+            type: Boolean,
+            default: false
+        },
+        exp: {
+            type: Date,
+        },
+        iat: {
+            type: Date,
+        },
+        // Refs
+        user: user_ref,
+    },
+    {
+        // no timestamps
+    }
+)
+
+export const JWTModel = conn.model("JWT", jwt_schema)
 
 export const OrderStatusEnum = {
     IN_PROGRESS: "in progress",

@@ -124,6 +124,18 @@ export const prose_qoute_ref_optional = {
     }
 };
 
+export const user_ref = { 
+    type: Schema.Types.UUID, 
+    ref: 'User', 
+    required: true,
+    validate: {
+        async validator(value: Schema.Types.UUID) {
+            return await UserModel.findById(value) !== null;
+        },
+        message: 'Referenced User does not exist'
+    }
+};
+
 export const user_ref_optional = { 
     type: Schema.Types.UUID, 
     ref: 'User', 
