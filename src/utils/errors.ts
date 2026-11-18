@@ -18,6 +18,9 @@ export function on_process_failure() {
   });
 }
 
+
+export type CausedIn = "controller" | "service" | "repository" | "middleware" | "internal"
+
 /**
  * A custom error used to used in API components,
  * make sure to specify the HTTP status code
@@ -26,7 +29,7 @@ export class APIError extends Error {
   constructor(
     public readonly status_code: HttpStatusCode,
     // public readonly endpoint: string,
-    public readonly caused_in: "controller" | "service" | "repository" | null  = null,
+    public readonly caused_in: CausedIn,
     message: string = "API Error",
   ) {
     super(message);
@@ -36,3 +39,24 @@ export class APIError extends Error {
     Error.captureStackTrace(this);
   }  
 }
+
+
+// // centralized error object that derives from Node’s Error
+// // used like:     throw new AppError(ResourceNotFound, HTTPErrors.NotFound, 'further explanation', true)
+// export class AppError extends Error {
+//   public readonly name: string;
+//   public readonly httpCode: HttpCode;
+//   public readonly isOperational: boolean;
+
+//   constructor(name: string, httpCode: HttpCode, description: string, isOperational: boolean) {
+//     super(description);
+
+//     Object.setPrototypeOf(this, new.target.prototype); // restore prototype chain
+
+//     this.name = name;
+//     this.httpCode = httpCode;
+//     this.isOperational = isOperational;
+
+//     Error.captureStackTrace(this);
+//   }
+// }
