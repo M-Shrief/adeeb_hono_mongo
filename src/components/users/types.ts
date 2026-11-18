@@ -1,5 +1,7 @@
+import { RoleEnumType } from "../../database/schemas.js";
+
 export interface User {
+ _id: string;
  username: string;
- id: string;
- roles: ("Normal" | "Management" | "DBA" | "Analytics" | "Banned")[];
+ roles: RoleEnumType[];
 };
