@@ -2,10 +2,10 @@ import { QueryFilter, Types } from 'mongoose';
 /////
 import { RoleEnum, UserModel } from "../../database/schemas.js"
 import { logger } from '../../utils/logger.js';
-import { User } from './types.js';
 import { APIError } from '../..//utils/errors.js'
 import { HttpStatusCode } from '../../utils/api.js';
-import { hash_password, RoleEnumType } from '../../utils/auth.js';
+import { hash_password } from '../../auth/passwords.js';
+import { RoleEnumType } from '../../database/schemas.js';
 
 
 const get_all = async (limit: number, offset: number) => {
