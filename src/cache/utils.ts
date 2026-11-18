@@ -17,13 +17,13 @@ export const cache_get = async(key: string): Promise<{} | null> => {
     }
 }
 
-export const cache_set = async(key: string, value: any) => {
+export const cache_set = async(key: string, value: any, minutes: number =  15) => {
     try {
         await cache.set(
             key, 
             JSON.stringify(value), 
             {
-                expiry: {type: TimeUnit.Seconds, count: 60 * 15}
+                expiry: {type: TimeUnit.Seconds, count: 60 * minutes}
             }
         )
     } catch(e) {
@@ -36,7 +36,7 @@ export const cache_del = async(key: string) => {
     try {
         await cache.del([key])
     } catch(e) {
-        logger.error({error: e}, `Cache set error for ${key} key`)
+        logger.error({error: e}, `Cache del error for ${key} key`)
     }
 }
 
