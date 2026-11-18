@@ -3,26 +3,20 @@ import { HttpStatusCode } from "../../utils/api.js"
 import { APIError } from "../../utils/errors.js"
 import { logger } from "../../utils/logger.js"
 import { repository } from "./repository.js"
-import { verify_token, create_permission, OP, check_permission, check_if_adminstrator, check_ownership} from "../../utils/auth.js"
-import { RoleEnum } from "../../database/schemas.js"
+import { verify_jwt} from "../../auth/jwt.js"
+import { verify_admin_user, check_admin_permissions, check_item_ownership} from "../../auth/utils.js"
+import { AuthError, AuthError_ReasonEnum } from "../../auth/errors.js"
 
 
-const get_all = async(auth_header: string, limit: number, offset: number) => {
+const get_all = async(token: string, limit: number, offset: number) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
-        }
-
-        let permissions = payload["permissions"] as string[]
-
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
-        if (!is_authorized) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
-        }
+        await verify_admin_user(token)
         let repo_result = await repository.get_all(limit, offset)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -32,27 +26,20 @@ const get_all = async(auth_header: string, limit: number, offset: number) => {
     }    
 } 
 
-const get_user_orders = async(auth_header: string, limit: number, offset: number) => {
+const get_user_orders = async(token: string, limit: number, offset: number) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        // even if user is banned, he should be able to read his data.
+        // so don't check his permission and we don't use verify_normal_user()
+        let result = await verify_jwt(token) 
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-        let authorized_list = [
-            create_permission(RoleEnum.NORMAL, OP.READ)
-        ]
-        
-        let is_authorized = check_permission(authorized_list, permissions, OP.READ)
-        if (!is_authorized) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
-        }
-        let user: any = payload["user"]
-        let user_id: string = user["id"]
-        let repo_result = await repository.get_user_orders(user_id, limit, offset)
+        let repo_result = await repository.get_user_orders(result.claims.user!.id, limit, offset)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -62,27 +49,25 @@ const get_user_orders = async(auth_header: string, limit: number, offset: number
     }    
 } 
 
-const get_one_by_id = async(id: string, auth_header: string) => {
+const get_one_by_id = async(id: string, token: string) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        let result = await verify_jwt(token)
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-
         let checked_order = await repository.check_order(id)
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
+        let is_authorized = check_admin_permissions(result.claims.permissions!, "read")
         if (!is_authorized) {
-            let order_user = checked_order.get("user") 
-            let order_user_val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-            if (check_ownership(order_user_val, payload) == false) {
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (check_item_ownership(checked_order.user.toString(), result.claims) == false) {
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
         }        
         let repo_result = await repository.get_one_by_id(id)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -107,21 +92,15 @@ const create_order = async(new_data: any) => {
     }
 } 
 
-const create_orders = async(auth_header: string, new_data: any[]) => {
+const create_orders = async(token: string, new_data: any[]) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
-        }
-
-        let permissions = payload["permissions"] as string[]
-        let is_authorized = check_if_adminstrator(permissions, OP.WRITE)
-        if (!is_authorized) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
-        }
+        await verify_admin_user(token, "write")
         let repo_result = await repository.create_orders(new_data)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -131,31 +110,29 @@ const create_orders = async(auth_header: string, new_data: any[]) => {
     }
 }
 
-const create_print = async(order_id: string, auth_header: string, new_data: any) => {
+const create_print = async(order_id: string, token: string, new_data: any) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        let result = await verify_jwt(token)
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-
         let checked_order = await repository.check_order(order_id)
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
-        let order_user = checked_order.get("user") 
-        let order_user_val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+        let is_authorized = check_admin_permissions(result.claims.permissions!, "write")
         if (!is_authorized) {
-            if (check_ownership(order_user_val, payload) == false) {
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (check_item_ownership(checked_order.user.toString(), result.claims) == false) {
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
             // if it's owner, we need to check if he can update it or not
-            if (!checked_order.get("is_updateable")) { 
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (!checked_order.is_updateable) { 
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
         }
-        let repo_result = await repository.create_print(order_id, order_user_val, new_data)
+        let repo_result = await repository.create_print(order_id, checked_order.user.toString(), new_data)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -165,31 +142,29 @@ const create_print = async(order_id: string, auth_header: string, new_data: any)
     }
 } 
 
-const create_prints = async(order_id: string, auth_header: string, new_data: any[]) => {
+const create_prints = async(order_id: string, token: string, new_data: any[]) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        let result = await verify_jwt(token)
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-
         let checked_order = await repository.check_order(order_id)
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
-        let order_user = checked_order.get("user") 
-        let order_user_val =  order_user == null || order_user == undefined  ? null : order_user.toString()
+        let is_authorized = check_admin_permissions(result.claims.permissions!, "write")
         if (!is_authorized) {
-            if (check_ownership(order_user_val, payload) == false) {
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (check_item_ownership(checked_order.user.toString(), result.claims) == false) {
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
             // if it's owner, we need to check if he can update it or not
-            if (!checked_order.get("is_updateable")) { 
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (!checked_order.is_updateable) { 
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
         }
-        let repo_result = await repository.create_prints(order_id, order_user_val, new_data)
+        let repo_result = await repository.create_prints(order_id, checked_order.user.toString(), new_data)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -199,26 +174,21 @@ const create_prints = async(order_id: string, auth_header: string, new_data: any
     }
 }
 
-const update_order = async(id: string, auth_header: string, data: any) => {
+const update_order = async(id: string, token: string, data: any) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        let result = await verify_jwt(token)
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-
         let checked_order = await repository.check_order(id)
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
+        let is_authorized = check_admin_permissions(result.claims.permissions!, "write")
         if (!is_authorized) {
-            let order_user = checked_order.get("user") 
-            let order_user_val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-            if (check_ownership(order_user_val, payload) == false) {
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (check_item_ownership(checked_order.user.toString(), result.claims) == false) {
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
             // if it's owner, we need to check if he can update it or not
-            if (!checked_order.get("is_updateable")) { 
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (!checked_order.is_updateable) { 
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
             // if it's updated by the owner, then remove admin's related fields -- aka assign them to undefine.
             data.is_updateable = undefined
@@ -229,6 +199,9 @@ const update_order = async(id: string, auth_header: string, data: any) => {
         let repo_result = await repository.update_order(id, data)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -238,31 +211,29 @@ const update_order = async(id: string, auth_header: string, data: any) => {
     }
 }
 
-const update_print = async(order_id: string, print_id: string, auth_header: string, data: any) => {
+const update_print = async(order_id: string, print_id: string, token: string, data: any) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        let result = await verify_jwt(token)
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-
         let checked_order = await repository.check_order(order_id)
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
+        let is_authorized = check_admin_permissions(result.claims.permissions!, "write")
         if (!is_authorized) {
-            let order_user = checked_order.get("user") 
-            let order_user_val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-            if (check_ownership(order_user_val, payload) == false) {
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (check_item_ownership(checked_order.user.toString(), result.claims) == false) {
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
             // if it's owner, we need to check if he can update it or not
-            if (!checked_order.get("is_updateable")) { 
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (!checked_order.is_updateable) { 
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
         }
         let repo_result = await repository.update_print(order_id, print_id, data)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -272,31 +243,29 @@ const update_print = async(order_id: string, print_id: string, auth_header: stri
     }
 }
 
-const delete_order = async(id: string, auth_header: string) => {
+const delete_order = async(id: string, token: string) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        let result = await verify_jwt(token)
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-
         let checked_order = await repository.check_order(id)
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
+        let is_authorized = check_admin_permissions(result.claims.permissions!, "write")
         if (!is_authorized) {
-            let order_user = checked_order.get("user") 
-            let order_user_val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-            if (check_ownership(order_user_val, payload) == false) {
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (check_item_ownership(checked_order.user.toString(), result.claims) == false) {
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
             // if it's owner, we need to check if he can update it or not
-            if (!checked_order.get("is_updateable")) { 
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (!checked_order.is_updateable) { 
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
         }
         let repo_result = await repository.delete_order(id)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {
@@ -306,31 +275,29 @@ const delete_order = async(id: string, auth_header: string) => {
     }
 }
 
-const delete_print = async(order_id: string, print_id: string, auth_header: string) => {
+const delete_print = async(order_id: string, print_id: string, token: string) => {
     try {
-        let payload = await verify_token(auth_header)
-        if (!payload) {
-            throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+        let result = await verify_jwt(token)
+        if (result.error) {
+            throw new AuthError(result.error, "service")
         }
-
-        let permissions = payload["permissions"] as string[]
-
         let checked_order = await repository.check_order(order_id)
-        let is_authorized = check_if_adminstrator(permissions, OP.READ)
+        let is_authorized = check_admin_permissions(result.claims.permissions!, "write")
         if (!is_authorized) {
-            let order_user = checked_order.get("user") 
-            let order_user_val =  order_user == null || order_user == undefined  ? null : order_user.toString()
-            if (check_ownership(order_user_val, payload) == false) {
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (check_item_ownership(checked_order.user.toString(), result.claims) == false) {
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
             // if it's owner, we need to check if he can update it or not
-            if (!checked_order.get("is_updateable")) { 
-                throw new APIError(HttpStatusCode.UNAUTHORIZED, "service")
+            if (!checked_order.is_updateable) { 
+                throw new AuthError(AuthError_ReasonEnum.PERM, "service")
             }
         }
         let repo_result = await repository.delete_print(order_id, print_id)
         return repo_result
     } catch(e) {
+        if(e instanceof AuthError) {
+            throw e
+        }
         if(e instanceof APIError) {
             throw e
         } else {

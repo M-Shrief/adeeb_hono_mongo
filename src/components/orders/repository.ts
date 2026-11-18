@@ -339,7 +339,7 @@ const update_print = async(order_id: string, print_id: string, data: any) => {
 }
 
 const delete_order = async(id: string) => {
-    try {        
+    try {
         await PrintModel.deleteMany({ order: new Types.UUID(id) })
         let filter_q: QueryFilter<typeof OrderModel> = { _id: new Types.UUID(id) }
         await OrderModel.deleteOne( filter_q)
