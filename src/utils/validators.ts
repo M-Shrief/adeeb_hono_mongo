@@ -6,7 +6,7 @@ import {  object } from 'valibot';
 ///
 import { HttpStatusCode } from "./api.js"
 import { uuid_schema } from "../schemas/general.js"
-import { auth_header_schema } from "./auth.js";
+import { auth_header_schema } from "../auth/utils.js";
 
 
 /**
@@ -66,6 +66,28 @@ export const param_validator = (schema: any, message?: string, show_errors: bool
 
 export const query_validator = (schema: any, message?: string, show_errors: boolean = true) =>
   vValidator("query", schema, (result, c) => {
+    if (!result.success) {
+      if (show_errors) {
+        return c.json(
+          {
+            message: message ?? 'query validation error',
+            errors: format_errors(result.error)
+          },
+          HttpStatusCode.UNPROCESSABLE_ENTITY,
+        );
+      } else {
+        return c.json(
+          {
+            message: message ?? 'query validation error',
+          },
+          HttpStatusCode.UNPROCESSABLE_ENTITY,
+        );
+      }
+    }
+  });
+
+export const cookie_validator = (schema: any, message?: string, show_errors: boolean = true) =>
+  vValidator("cookie", schema, (result, c) => {
     if (!result.success) {
       if (show_errors) {
         return c.json(
