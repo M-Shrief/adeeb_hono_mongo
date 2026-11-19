@@ -11,6 +11,7 @@ import { minimal_schema as adeeb_schema } from "../../schemas/adeeb.js"
 import { create_many_schema } from '../../schemas/api.js';
 
 export const get_one_res = object({
+  _id: uuid_schema,
   qoute: qoute_schema,
   source: optional(source_schema),
   tags: tags_schema,
