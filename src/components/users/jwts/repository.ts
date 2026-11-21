@@ -258,9 +258,13 @@ const delete_user_jwts = async(user_id: string) => {
 
 const cleanup = async() => {
     try{    
-        let cutoff = time_utils.NowWithDelta(REFRESH_EXP_MIN_DELTA)
-        const { deletedCount } = await JWTModel.deleteMany({
-            exp: { $lt: cutoff }
+        await JWTModel.deleteMany({
+            token_type: {$eq: "access"},
+            exp: { $lt: time_utils.NowWithDelta(60 * 24 * -1) }
+        });
+        await JWTModel.deleteMany({
+            token_type: {$eq: "refresh"},
+            exp: { $lt: time_utils.NowWithDelta(REFRESH_EXP_MIN_DELTA * -1) }
         });
         await cache.flushall(FlushMode.ASYNC)
     } catch(e: any) {
